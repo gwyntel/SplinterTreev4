@@ -83,24 +83,17 @@ class ContextCog(commands.Cog):
                 for row in cursor.fetchall():
                     content = row[2]
                     
-                    # Skip empty or None content
+                    # Skip empty or whitespace-only content
                     if not content or content.isspace():
                         continue
                         
                     # Skip if we've seen this exact content before
                     if content in seen_contents:
                         continue
-                    
-                    # Skip if content is too similar to recent messages
-                    skip = False
-                    for prev_content in list(seen_contents)[-3:]:
-                        if self._similarity_score(content, prev_content) > 0.9:
-                            skip = True
-                            break
-                    if skip:
-                        continue
-                    
+                        
+                    # Add the content to seen_contents to skip exact duplicates
                     seen_contents.add(content)
+                    
                     messages.append({
                         'id': row[0],  # discord_message_id
                         'user_id': row[1],

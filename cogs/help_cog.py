@@ -4,7 +4,7 @@ import logging
 import json
 import sqlite3
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Optional
 import aiohttp
 import asyncio
@@ -129,72 +129,56 @@ class HelpCog(commands.Cog, name="Help"):
             # Add special features and tips
             help_message = f"""{model_list}
 **📝 Special Features:**
-• **Multi-Model Support** - Access a variety of AI models through OpenRouter and OpenPipe
-• **Streaming Responses** - Real-time response streaming for natural conversation flow
-• **Shared Context Database** - Models share conversation history for better context
-• **Universal Image Processing** - Automatic image description and analysis for all models
-• **File Handling** - Support for text files and images
-• **Response Reroll** - Click the 🎲 button to get a different response
-• **Emotion Analysis** - Reactions based on message sentiment
-• **Status Updates** - Rotating status showing uptime, last interaction, and current model
+• **Context Management** - Manages conversation history and shared context between models
+• **Intelligent Message Routing** - Routes messages to appropriate models based on content
+• **Emotion Analysis** - Provides emotion analysis and interaction logging
 • **Dynamic System Prompts** - Customizable per-channel system prompts with variable support
-• **Agent Cloning** - Create custom variants of existing agents with unique system prompts
-• **PST Timezone Preference** - All time-related operations use Pacific Standard Time (PST) by default
-• **User ID Resolution** - Automatically resolves Discord user IDs to usernames in messages
-• **Attachment-Only Processing** - Handles messages containing only attachments (images, text files)
-• **Automatic Database Initialization** - Schema is automatically applied on bot startup
-• **Improved Error Handling and Logging** - Enhanced error reporting for better troubleshooting
-• **OpenPipe Request Reporting** - Automatic logging for analysis and model improvement
-• **Message ID Tracking** - Prevents duplicate messages by tracking processed message IDs
-• **Webhook Integration** - Send LLM responses to Discord webhooks using !hook command
+• **Webhook Integration** - Send responses through configured Discord webhooks using `!hook`
+• **Administrative Commands** - Manage bot status and channel configurations
+• **Database Interactions** - Manages SQLite database interactions for context and logging
+• **Error Handling and Logging** - Enhanced error reporting for better troubleshooting
 
 **💡 Tips:**
-1. Models will respond when you mention their trigger words
+1. Models will respond when you mention their trigger words (e.g., 'nemotron', 'gemini')
 2. Each model has unique strengths - try different ones for different tasks
-3. For private responses, format your message like: ||your message here||
-4. Images are automatically analyzed when sent with messages
-5. Use the reroll button to get alternative responses if needed
-6. Manage conversation context with `!setcontext`, `!getcontext`, and `!resetcontext`
-7. Clone agents to create custom AI assistants tailored to your needs
-8. Use system prompt variables for dynamic and personalized prompts
-9. Use `!router_activate` in a channel to make the Router respond to all messages
-10. DMs with the bot are automatically handled by the Router
-11. Use `!hook` to send responses through configured Discord webhooks
+3. Use `!listmodels` to see a simple list of available models
+4. Use `!list_agents` to get detailed information about each agent
+5. For private responses, you can DM the bot directly
+6. To activate the router in a channel, use `!router_activate` (Admin only)
+7. Customize system prompts per channel using `!set_system_prompt` (Admin only)
+8. Use `!getcontext` to view the current context window size
+9. Manage conversation context with `!setcontext`, `!resetcontext`, and `!clearcontext` (Admin only)
+10. Use `!hook` to send responses through Discord webhooks
 
 **Available Commands:**
 • `!help` - Show this help message
 • `!listmodels` - Show all available models (simple list)
 • `!list_agents` - Show all available agents with detailed info
 • `!uptime` - Show how long the bot has been running
-• `!set_system_prompt <agent> <prompt>` - Set a custom system prompt for an AI agent
-• `!reset_system_prompt <agent>` - Reset an AI agent's system prompt to default
-• `!clone_agent <agent> <new_name> <system_prompt>` - Create a new agent based on an existing one (Admin only)
+• `!set_system_prompt <agent> <prompt>` - Set a custom system prompt for an AI agent (Admin only)
+• `!reset_system_prompt <agent>` - Reset an AI agent's system prompt to default (Admin only)
 • `!setcontext <size>` - Set the number of previous messages to include in context (Admin only)
 • `!getcontext` - View current context window size
 • `!resetcontext` - Reset context window to default size (Admin only)
-• `!clearcontext [hours]` - Clear conversation history, optionally specify hours
-• `!summarize` - Force create a summary for the current channel (Admin only)
-• `!getsummaries [hours]` - View chat summaries for specified hours (default: 24)
-• `!clearsummaries [hours]` - Clear chat summaries, optionally specify hours (Admin only)
-• `!router_activate` - Make Router respond to all messages in the current channel (Admin only)
-• `!router_deactivate` - Stop Router from responding to all messages in the current channel (Admin only)
-• `!hook <message>` - Send an LLM response through configured Discord webhooks
-• `!channel_activate` - Activate the bot to respond to every message in the current channel (Admin only)
+• `!clearcontext [hours]` - Clear conversation history, optionally specify hours (Admin only)
+• `!router_activate` - Activate the router to respond to all messages in the current channel (Admin only)
+• `!router_deactivate` - Deactivate the router in the current channel (Admin only)
+• `!hook <message>` - Send a response through configured Discord webhooks
+• `!channel_activate` - Make the bot respond to every message in the current channel (Admin only)
 • `!channel_deactivate` - Deactivate the bot's response to every message in the current channel (Admin only)
 • `!list_activated` - List all activated channels in the current server (Admin only)
 
 **System Prompt Variables:**
 When setting custom system prompts, you can use these variables:
-• {{MODEL_ID}} - The AI model's name
-• {{USERNAME}} - The user's Discord display name
-• {{DISCORD_USER_ID}} - The user's Discord ID
-• {{TIME}} - Current local time (PST)
-• {{TZ}} - Local timezone (PST)
-• {{SERVER_NAME}} - Current Discord server name
-• {{CHANNEL_NAME}} - Current channel name
+• `{{MODEL_ID}}` - The AI model's name
+• `{{USERNAME}}` - The user's Discord display name
+• `{{DISCORD_USER_ID}}` - The user's Discord ID
+• `{{TIME}}` - Current local time (PST)
+• `{{TZ}}` - Local timezone (PST)
+• `{{SERVER_NAME}}` - Current Discord server name
+• `{{CHANNEL_NAME}}` - Current channel name
 
 """
-
             # Send the help message in chunks to avoid exceeding Discord's message length limit
             for msg in [help_message[i:i + 2000] for i in range(0, len(help_message), 2000)]:
                 await ctx.send(msg)
@@ -264,24 +248,6 @@ When setting custom system prompts, you can use these variables:
             except Exception as e:
                 logging.warning(f"Could not update context_windows table: {str(e)}")
 
-            # Update config.py
-            try:
-                with open('config/config.py', 'r') as f:
-                    config_content = f.read()
-                
-                # Update or add the CONTEXT_WINDOWS dictionary
-                import re
-                config_content = re.sub(
-                    r'CONTEXT_WINDOWS\s*=\s*{[^}]*}', 
-                    f'CONTEXT_WINDOWS = {json.dumps(CONTEXT_WINDOWS)}', 
-                    config_content
-                )
-                
-                with open('config/config.py', 'w') as f:
-                    f.write(config_content)
-            except Exception as e:
-                logging.warning(f"Could not update config.py: {str(e)}")
-
             await ctx.reply(f"✅ Context window set to {size} messages for this channel")
         except Exception as e:
             logging.error(f"Failed to set context: {str(e)}")
@@ -293,7 +259,7 @@ When setting custom system prompts, you can use these variables:
         """Reset context window to default size"""
         try:
             channel_id = str(ctx.channel.id)
-            
+
             # Remove channel-specific context setting
             if channel_id in CONTEXT_WINDOWS:
                 del CONTEXT_WINDOWS[channel_id]
@@ -308,24 +274,6 @@ When setting custom system prompts, you can use these variables:
                     conn.commit()
             except Exception as e:
                 logging.warning(f"Could not update context_windows table: {str(e)}")
-
-            # Update config.py
-            try:
-                with open('config/config.py', 'r') as f:
-                    config_content = f.read()
-                
-                # Update or add the CONTEXT_WINDOWS dictionary
-                import re
-                config_content = re.sub(
-                    r'CONTEXT_WINDOWS\s*=\s*{[^}]*}', 
-                    f'CONTEXT_WINDOWS = {json.dumps(CONTEXT_WINDOWS)}', 
-                    config_content
-                )
-                
-                with open('config/config.py', 'w') as f:
-                    f.write(config_content)
-            except Exception as e:
-                logging.warning(f"Could not update config.py: {str(e)}")
 
             await ctx.reply(f"🔄 Context window reset to default ({DEFAULT_CONTEXT_WINDOW} messages)")
         except Exception as e:
@@ -350,7 +298,7 @@ When setting custom system prompts, you can use these variables:
         # Find an appropriate LLM cog to handle the message
         response = None
         used_cog = None
-        
+
         # Try router cog first if available
         router_cog = self.bot.get_cog('RouterCog')
         if router_cog:
@@ -399,7 +347,7 @@ When setting custom system prompts, you can use these variables:
     @commands.command(name='router_activate')
     @commands.has_permissions(manage_messages=True)
     async def router_activate(self, ctx):
-        """Make Router respond to all messages in the current channel"""
+        """Activate the router to respond to all messages in the current channel"""
         try:
             router_cog = self.bot.get_cog('RouterCog')
             if router_cog:
@@ -415,7 +363,7 @@ When setting custom system prompts, you can use these variables:
     @commands.command(name='router_deactivate')
     @commands.has_permissions(manage_messages=True)
     async def router_deactivate(self, ctx):
-        """Stop Router from responding to all messages in the current channel"""
+        """Deactivate the router in the current channel"""
         try:
             router_cog = self.bot.get_cog('RouterCog')
             if router_cog:
