@@ -383,7 +383,9 @@ Model name:"""
             await message.channel.send(f"❌ Error processing message: {str(e)}")
 
     async def cog_check(self, ctx):
-        """Ensure that commands are only used in guilds."""
+        """Ensure that commands are only used in guilds, except for the 'store' command."""
+        if ctx.command.name == 'store':
+            return True  # Allow 'store' command in DMs
         return ctx.guild is not None
 
 async def setup(bot):
