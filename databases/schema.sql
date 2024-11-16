@@ -45,6 +45,14 @@ CREATE TABLE IF NOT EXISTS logs (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- User settings storage
+CREATE TABLE IF NOT EXISTS user_settings (
+    user_id TEXT PRIMARY KEY,
+    store_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Create indexes for better query performance
 CREATE INDEX IF NOT EXISTS idx_messages_channel ON messages(channel_id);
 CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp);

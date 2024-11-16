@@ -5,6 +5,10 @@ from .base_cog import BaseCog
 import json
 from typing import AsyncGenerator, Optional, Dict, List
 import re
+import sqlite3
+import os
+import aiosqlite
+from datetime import datetime
 
 class RouterCog(BaseCog):
     def __init__(self, bot):
@@ -79,8 +83,48 @@ class RouterCog(BaseCog):
         self.model_lookup = {k.lower(): k for k in self.model_mapping.keys()}
         logging.debug(f"[Router] Model lookup table: {self.model_lookup}")
 
-        # Initialize user-specific store settings
-        self.user_store_settings = {}
+        # Database path
+        self.db_path = 'databases/interaction_logs.db'
+
+    async def _init_db(self):
+        """Initialize database connection and ensure table exists"""
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute('''
+                CREATE TABLE IF NOT EXISTS user_settings (
+                    user_id TEXT PRIMARY KEY,
+                    store_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            await db.commit()
+
+    async def cog_load(self):
+        """Called when the cog is loaded"""
+        await self._init_db()
+
+    async def get_store_setting(self, user_id: int) -> bool:
+        """Get store setting from database"""
+        async with aiosqlite.connect(self.db_path) as db:
+            async with db.execute(
+                'SELECT store_enabled FROM user_settings WHERE user_id = ?',
+                (str(user_id),)
+            ) as cursor:
+                result = await cursor.fetchone()
+                return bool(result[0]) if result else False
+
+    async def set_store_setting(self, user_id: int, enabled: bool):
+        """Set store setting in database"""
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute('''
+                INSERT INTO user_settings (user_id, store_enabled, updated_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(user_id) 
+                DO UPDATE SET 
+                    store_enabled = excluded.store_enabled,
+                    updated_at = CURRENT_TIMESTAMP
+            ''', (str(user_id), enabled))
+            await db.commit()
 
     def has_bypass_keywords(self, content: str) -> bool:
         """Check if message contains keywords that should bypass routing"""
@@ -331,18 +375,34 @@ Model name:"""
     async def toggle_store(self, ctx, option: str):
         """Toggle the store setting for the user. Use '!store on' to enable and '!store off' to disable."""
         user_id = ctx.author.id
-        if option.lower() == 'on':
-            self.user_store_settings[user_id] = True
-            await ctx.send("Store setting enabled for you.")
-        elif option.lower() == 'off':
-            self.user_store_settings[user_id] = False
-            await ctx.send("Store setting disabled for you.")
-        else:
-            await ctx.send("Invalid option. Use '!store on' or '!store off'.")
+        try:
+            if option.lower() == 'on':
+                await self.set_store_setting(user_id, True)
+                await ctx.send("Store setting enabled for you.")
+                logging.info(f"[Router] Store enabled for user {user_id}")
+            elif option.lower() == 'off':
+                await self.set_store_setting(user_id, False)
+                await ctx.send("Store setting disabled for you.")
+                logging.info(f"[Router] Store disabled for user {user_id}")
+            else:
+                await ctx.send("Invalid option. Use '!store on' or '!store off'.")
+        except Exception as e:
+            logging.error(f"[Router] Error toggling store setting: {str(e)}")
+            await ctx.send("❌ Error updating store setting. Please try again later.")
 
-    def is_store_enabled(self, user_id: int) -> bool:
+    async def is_store_enabled(self, user_id: int) -> bool:
         """Check if the store setting is enabled for a user."""
-        return self.user_store_settings.get(user_id, False)
+        try:
+            return await self.get_store_setting(user_id)
+        except Exception as e:
+            logging.error(f"[Router] Error checking store setting: {str(e)}")
+            return False
+
+    async def _generate_response(self, message) -> AsyncGenerator[str, None]:
+        """Generate a response for the RouterCog."""
+        async def response_generator():
+            yield "Test response"
+        return response_generator()
 
     @commands.Cog.listener()
     async def on_message(self, message):
