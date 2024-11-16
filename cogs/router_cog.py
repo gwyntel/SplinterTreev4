@@ -79,6 +79,9 @@ class RouterCog(BaseCog):
         self.model_lookup = {k.lower(): k for k in self.model_mapping.keys()}
         logging.debug(f"[Router] Model lookup table: {self.model_lookup}")
 
+        # Initialize user-specific store settings
+        self.user_store_settings = {}
+
     def has_bypass_keywords(self, content: str) -> bool:
         """Check if message contains keywords that should bypass routing"""
         content = content.lower()
@@ -323,6 +326,23 @@ Model name:"""
         self.last_model_used.pop(f"{channel_id}_count", None)
         await ctx.send("RouterCog has been deactivated in this channel.")
         logging.info(f"[Router] Deactivated in channel {channel_id}")
+
+    @commands.command(name='store')
+    async def toggle_store(self, ctx, option: str):
+        """Toggle the store setting for the user. Use '!store on' to enable and '!store off' to disable."""
+        user_id = ctx.author.id
+        if option.lower() == 'on':
+            self.user_store_settings[user_id] = True
+            await ctx.send("Store setting enabled for you.")
+        elif option.lower() == 'off':
+            self.user_store_settings[user_id] = False
+            await ctx.send("Store setting disabled for you.")
+        else:
+            await ctx.send("Invalid option. Use '!store on' or '!store off'.")
+
+    def is_store_enabled(self, user_id: int) -> bool:
+        """Check if the store setting is enabled for a user."""
+        return self.user_store_settings.get(user_id, False)
 
     @commands.Cog.listener()
     async def on_message(self, message):

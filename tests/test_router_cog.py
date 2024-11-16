@@ -34,3 +34,30 @@ async def test_generate_response(cog):
     response = await cog.generate_response(message)
 
     assert response == "Test response"
+
+@pytest.mark.asyncio
+async def test_store_on_command(cog):
+    """Test the !store on command to enable the store setting for a user."""
+    ctx = MagicMock()
+    ctx.author.id = 789
+    ctx.send = AsyncMock()
+
+    await cog.toggle_store(ctx, 'on')
+
+    assert cog.is_store_enabled(789) is True
+    ctx.send.assert_called_once_with("Store setting enabled for you.")
+
+@pytest.mark.asyncio
+async def test_store_off_command(cog):
+    """Test the !store off command to disable the store setting for a user."""
+    ctx = MagicMock()
+    ctx.author.id = 789
+    ctx.send = AsyncMock()
+
+    # First, enable the store setting
+    cog.user_store_settings[789] = True
+
+    await cog.toggle_store(ctx, 'off')
+
+    assert cog.is_store_enabled(789) is False
+    ctx.send.assert_called_once_with("Store setting disabled for you.")
