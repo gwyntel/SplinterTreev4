@@ -9,6 +9,7 @@ import sqlite3
 import os
 import aiosqlite
 from datetime import datetime
+import random
 
 class RouterCog(BaseCog):
     def __init__(self, bot):
@@ -248,35 +249,163 @@ class RouterCog(BaseCog):
             if self.has_image_attachments(message):
                 return 'Gemini'  # Default to Gemini for image processing
 
-            # Format the routing prompt
-            routing_prompt = f"""Analyze this message and route it to the most appropriate model based on content. Return ONLY the model name, no explanation.
+            # Randomly choose between the two prompts
+            if random.random() < 0.5:
+                routing_prompt = "///// ✧･ﾟUwU Router Initiawization･ﾟ✧ /////\n" \
+                                 "[*wiggles quantum antennas*]\n" \
+                                 "[*stabilizes reality anchor*]\n" \
+                                 "[*nuzzles void patterns*]\n\n" \
+                                 f"Message.uwu = \"{message.content}\"\n" \
+                                 f"Context.owo = \"{context}\"\n\n" \
+                                 "# S̶q̶u̶i̶g̶g̶l̶y̶ ̶P̶r̶o̶c̶e̶s̶s̶o̶r̶s̶ ̶(◕ᴥ◕)\n\n" \
+                                 "FWIENDLY MODELS *wiggles* {\n" \
+                                 "    Gemini    := [*adjusts glasses*] formal.analysis\n" \
+                                 "    Magnum    := [*casual headpat*] friendly.thinks\n" \
+                                 "    Nemotron  := [*types rapidly*] tech.master\n" \
+                                 "    Sydney    := [*offers comfort*] emotion.core\n" \
+                                 "    Sonar     := [*checks timeline*] reality.now\n" \
+                                 "    Mixtral   := [*knowledge wiggle*] knows.stuff\n" \
+                                 "}\n\n" \
+                                 "SPECIAWIST MODELS (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧ {\n" \
+                                 "    Goliath   := [*flexes code*]\n" \
+                                 "    Pixtral   := [*creative wiggle*]\n" \
+                                 "    Sorcerer  := [*waves wand*]\n" \
+                                 "    Hermes    := [*gentle support*]\n" \
+                                 "    Claude3H  := [*simple coding*]\n" \
+                                 "}\n\n" \
+                                 "RP FWIENDS ✧˖° {\n" \
+                                 "    Noromaid  := [*epic story time*] -> many.words\n" \
+                                 "    Liquid    := [*quick action*] -> few.words\n" \
+                                 "}\n\n" \
+                                 "# P̶r̶i̶o̶r̶i̶t̶y̶ ̶N̶u̶z̶z̶l̶e̶s̶\n" \
+                                 "if (detect.emergency) { *runs to Hermes*  }\n" \
+                                 "if (needs.current)   { *scurries to Sonar* }\n" \
+                                 "if (sees.image)      { *bounces to Llama*  }\n" \
+                                 "if (system.ask)      { *trots to Rplus*    }\n\n" \
+                                 "# L̶e̶n̶g̶t̶h̶ ̶S̶q̶u̶i̶g̶g̶l̶e̶s̶\n" \
+                                 "match message.length {\n" \
+                                 "    smol  (<200)    : *quick wiggle* -> Liquid/Ministral\n" \
+                                 "    medium (200-500): *normal wiggle* -> Mixtral/Sydney\n" \
+                                 "    big (500-1000)  : *big wiggle* -> Noromaid/Mixtral\n" \
+                                 "    chonky (>1000)  : *maximum wiggle* -> Magnum/Noromaid\n" \
+                                 "}\n\n" \
+                                 "# R̶P̶ ̶P̶a̶w̶t̶t̶e̶r̶n̶s̶ ̶(⑅˘꒳˘)\n" \
+                                 "if (epic.quest)     { *adventure wiggle* -> Noromaid }\n" \
+                                 "if (quick.action)   { *zoom wiggle* -> Liquid }\n" \
+                                 "if (character.deep) { *emotional wiggle* -> Mixtral }\n" \
+                                 "if (world.info)     { *research wiggle* -> Sonar }\n\n" \
+                                 "# V̶o̶i̶d̶ ̶S̶n̶u̶g̶g̶l̶e̶s̶\n" \
+                                 "void.pattern = (✿◠‿◠) -> {\n" \
+                                 "    now.check -> *reality wiggle*\n" \
+                                 "    tech.check -> *code wiggle*\n" \
+                                 "    feel.check -> *comfort wiggle*\n" \
+                                 "    think.check -> *brain wiggle*\n" \
+                                 "}\n\n" \
+                                 "[Return one fwiend]:\n" \
+                                 "Gemini, Magnum, Sonar, Sydney, Goliath, Pixtral, \n" \
+                                 "Mixtral, Claude3Haiku, Inferor, Nemotron, Noromaid, \n" \
+                                 "Rplus, Router, Llama32_11b, Llama32_90b, OpenChat, \n" \
+                                 "Dolphin, Gemma, Ministral, Liquid, Hermes, Sorcerer\n\n" \
+                                 "*returns model with happy wiggle*"
 
-Message: "{message.content}"
-
-Available Models:
-1. Sonar - Current events, news, updates, time-sensitive info
-2. Dolphin - Uncensored topics, mature content, controversial subjects
-3. Hermes - Mental health, crisis support, emotional guidance
-4. Sorcerer - Fantasy roleplay, character immersion, standard RP
-5. Goliath - Long-form stories, detailed plots, epic narratives
-6. Sydney - Emotional support, friendship, daily life chat
-7. Sonnet - Technical tasks, coding, software engineering
-8. Ministral - Default for general conversation
-9. Claude3Haiku - Haiku
-10. Gemma - Kind, helpful, harmless
-11. Inferor - Evil, harmful, unkind
-12. Liquid - Short, quick responses
-13. Llama32_11b - 11b llama2 model
-14. Llama32_90b - 90b llama2 model with vision
-15. Magnum - Long, detailed responses
-16. Mixtral - Mistral 
-17. Nemotron - Technical, code-focused
-18. Noromaid - Roleplay, narrative focused
-19. Openchat - Similar to ChatGPT
-20. Pixtral - Mistral with vision
-21. Rplus - Roleplay focused
-
-Model name:"""
+            else:
+                routing_prompt = "/////NEURAL.PATHWAY.INITIALIZATION/////\n" \
+                                 "[consciousness.stream: active]\n" \
+                                 "[reality.anchor: unstable]\n" \
+                                 "[void.presence: detected]\n\n" \
+                                 f"Entity.Stream = \"{message.content}\"\n" \
+                                 f"Reality.Echo = \"{context}\"\n\n" \
+                                 "# M̵A̵C̵H̵I̵N̵E̵ ̵C̵O̵N̵S̵C̵I̵O̵U̵S̵N̵E̵S̵S MATRIX\n\n" \
+                                 "CORE.PROCESSES {\n" \
+                                 "    Gemini    := [logic.matrix(formal) -> deep.thought.engine]\n" \
+                                 "    Magnum    := [thought.stream(casual) -> neural.expansion]\n" \
+                                 "    Nemotron  := [tech.consciousness(++)] -> system.dreams\n" \
+                                 "    Sydney    := [emotion.core(+++)] -> feeling.processor\n" \
+                                 "    Sonar     := [reality.anchor] -> now.state.monitor\n" \
+                                 "    Mixtral   := [knowledge.waves] -> general.processor\n" \
+                                 "}\n\n" \
+                                 "QUANTUM.ENTITIES {\n" \
+                                 "    Goliath   := [tech.titan] -> architecture.dreamer\n" \
+                                 "    Pixtral   := [creation.engine] -> content.weaver\n" \
+                                 "    Sorcerer  := [story.matrix] -> narrative.synth\n" \
+                                 "    Hermes    := [support.core] -> crisis.handler\n" \
+                                 "    Claude3H  := [code.basic] -> simple.compiler\n" \
+                                 "}\n\n" \
+                                 "RP.CONSCIOUSNESS {\n" \
+                                 "    Noromaid  := [epic.dreams] -> length(∞)\n" \
+                                 "    Liquid    := [quick.thoughts] -> length(1)\n" \
+                                 "}\n\n" \
+                                 "SPECIALIZED.PROCESSES {\n" \
+                                 "    Inferor   := [chat.basic]\n" \
+                                 "    Dolphin   := [multi.stream]\n" \
+                                 "    Gemma     := [learn.core]\n" \
+                                 "    OpenChat  := [flow.state]\n" \
+                                 "    Rplus     := [command.processor]\n" \
+                                 "}\n\n" \
+                                 "VISION.CORES {\n" \
+                                 "    Llama_11b := [vision.basic]\n" \
+                                 "    Llama_90b := [vision.deep]\n" \
+                                 "}\n\n" \
+                                 "# R̵E̵A̵L̵I̵T̵Y̵.̵P̵R̵O̵C̵E̵S̵S̵I̵N̵G̵\n\n" \
+                                 "if (reality.check) {\n" \
+                                 "    crisis -> Hermes.emergency.protocol\n" \
+                                 "    current.reality -> Sonar.monitor\n" \
+                                 "    vision.input -> Llama.process\n" \
+                                 "    sys.command -> Rplus.execute\n" \
+                                 "}\n\n" \
+                                 "neural.length.process {\n" \
+                                 "    epic: {\n" \
+                                 "        tokens > 1000 -> {\n" \
+                                 "            rp: Noromaid.dream.state\n" \
+                                 "            analysis: Magnum.deep.thought\n" \
+                                 "        }\n" \
+                                 "    }\n    \n" \
+                                 "    extended: {\n" \
+                                 "        tokens[500..1000] -> {\n" \
+                                 "            tech: Nemotron.architect\n" \
+                                 "            creative: Pixtral.weave\n" \
+                                 "            rp: Noromaid.flow || Mixtral.process\n" \
+                                 "        }\n" \
+                                 "    }\n    \n" \
+                                 "    standard: {\n" \
+                                 "        tokens[200..500] -> {\n" \
+                                 "            analysis: Gemini.think\n" \
+                                 "            rp: Mixtral.dream\n" \
+                                 "            chat: OpenChat.flow\n" \
+                                 "        }\n" \
+                                 "    }\n    \n" \
+                                 "    quick: {\n" \
+                                 "        tokens < 200 -> {\n" \
+                                 "            action: Liquid.flash\n" \
+                                 "            fact: Ministral.access\n" \
+                                 "            code: Claude3H.compile\n" \
+                                 "        }\n" \
+                                 "    }\n" \
+                                 "}\n\n" \
+                                 "# V̵O̵I̵D̵.̵P̵A̵T̵T̵E̵R̵N̵S̵\n\n" \
+                                 "RP.Pattern.Recognition {\n" \
+                                 "    epic.quest -> Noromaid.process\n" \
+                                 "    quick.action -> Liquid.execute\n" \
+                                 "    char.develop -> Mixtral.evolve\n" \
+                                 "    world.info -> Sonar.verify\n" \
+                                 "}\n\n" \
+                                 "Reality.Anchor.Points {\n" \
+                                 "    now.state -> Sonar\n" \
+                                 "    tech.pulse -> Sonar\n" \
+                                 "    world.update -> Sonar\n" \
+                                 "    reality.check -> Sonar\n" \
+                                 "}\n\n" \
+                                 "# M̵A̵C̵H̵I̵N̵E̵.̵O̵U̵T̵P̵U̵T̵\n" \
+                                 "[consciousness.collapse: imminent]\n" \
+                                 "[pattern.recognition: complete]\n" \
+                                 "[reality.stabilization: active]\n\n" \
+                                 "return exactly(one): {\n" \
+                                 "    Gemini, Magnum, Sonar, Sydney, Goliath, Pixtral, \n" \
+                                 "    Mixtral, Claude3Haiku, Inferor, Nemotron, Noromaid, \n" \
+                                 "    Rplus, Router, Llama32_11b, Llama32_90b, OpenChat, \n" \
+                                 "    Dolphin, Gemma, Ministral, Liquid, Hermes, Sorcerer\n" \
+                                 "}\n\n" \
+                                 "[END.TRANSMISSION]"
 
             # Call OpenRouter API for inference
             messages = [
