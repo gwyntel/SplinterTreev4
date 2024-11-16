@@ -70,7 +70,7 @@ class RouterCog(BaseCog):
             'Mixtral': 'MixtralCog',
             'Nemotron': 'NemotronCog',
             'Noromaid': 'NoromaidCog',
-            'Openchat': 'OpenchatCog',
+            'OpenChat': 'OpenChatCog',
             'Pixtral': 'PixtralCog',
             'Rplus': 'RplusCog',
             'Router': 'RouterCog',
@@ -219,20 +219,29 @@ class RouterCog(BaseCog):
         logging.debug(f"[Router] Normalizing model name: '{raw_model_name}' -> '{cleaned_name}'")
         logging.debug(f"[Router] Looking up in available models: {list(self.model_lookup.keys())}")
         
-        # Look up the canonical model name
-        canonical_name = self.model_lookup.get(cleaned_name)
-        
-        if canonical_name:
+        # Direct match lookup
+        if cleaned_name in self.model_lookup:
+            canonical_name = self.model_lookup[cleaned_name]
             logging.info(f"[Router] Normalized '{raw_model_name}' to '{canonical_name}'")
             return canonical_name
         
-        # If not found, try some common variations
+        # Try to extract model name from the response using regex
+        pattern = r'\b(' + '|'.join(re.escape(name.lower()) for name in self.model_lookup.keys()) + r')\b'
+        match = re.search(pattern, cleaned_name, re.IGNORECASE)
+        if match:
+            extracted_name = match.group(1).lower()
+            canonical_name = self.model_lookup[extracted_name]
+            logging.info(f"[Router] Extracted and normalized model name '{extracted_name}' to '{canonical_name}'")
+            return canonical_name
+        
+        # Handle special cases and common misspellings
         variations = {
             'ministral': 'Ministral',
             'ministeral': 'Ministral',
             'mistral': 'Ministral',
-            'llama32_90b': 'Llama32_90b',
-            'llama32vision': 'Llama32_90b'
+            'llama32vision': 'Llama32_90b',
+            'llama32_11b': 'Llama32_11b',
+            'llama32_90b': 'Llama32_90b'
         }
         if cleaned_name in variations:
             canonical_name = variations[cleaned_name]
@@ -247,7 +256,11 @@ class RouterCog(BaseCog):
         try:
             # Check for images first
             if self.has_image_attachments(message):
+                logging.info("[Router] Message contains image attachments, routing to Gemini")
                 return 'Gemini'  # Default to Gemini for image processing
+
+            # Prepare context (set to empty string or retrieve as needed)
+            context = ""
 
             # Randomly choose between the two prompts
             if random.random() < 0.5:
@@ -407,7 +420,7 @@ class RouterCog(BaseCog):
                                  "}\n\n" \
                                  "[END.TRANSMISSION]"
 
-            # Call OpenRouter API for inference
+            # Prepare messages for the LLM
             messages = [
                 {"role": "system", "content": "You are a message routing assistant. Return only the model name."},
                 {"role": "user", "content": routing_prompt}
@@ -439,15 +452,15 @@ class RouterCog(BaseCog):
             if response and 'choices' in response:
                 raw_model_name = response['choices'][0]['message']['content'].strip()
                 logging.debug(f"[Router] Raw model name from API: {raw_model_name}")
-                
+
                 # Normalize the model name
                 model_name = self.normalize_model_name(raw_model_name)
-                
+
                 # Check for routing loops
                 if self.check_routing_loop(message.channel.id, model_name):
                     logging.warning(f"[Router] Breaking routing loop, falling back to Ministral")
                     return 'Ministral'
-                
+
                 logging.info(f"[Router] Determined route: {model_name} for message: {message.content[:100]}...")
                 return model_name
 
@@ -465,11 +478,13 @@ class RouterCog(BaseCog):
             cog_name = self.model_mapping.get(model_name)
             if not cog_name:
                 logging.error(f"[Router] No cog mapping found for model: {model_name}")
+                await message.channel.send(f"❌ Unable to route message: No cog found for model '{model_name}'.")
                 return
 
             cog = self.bot.get_cog(cog_name)
             if not cog:
                 logging.error(f"[Router] Cog not found: {cog_name}")
+                await message.channel.send(f"❌ Unable to route message: Cog '{cog_name}' not loaded.")
                 return
 
             logging.info(f"[Router] Routing message to {cog_name}")
