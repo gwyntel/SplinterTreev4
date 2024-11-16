@@ -31,8 +31,6 @@ async def test_generate_response(cog):
     cog.api_client.call_openrouter = AsyncMock(return_value={'choices': [{'message': {'content': 'Test response'}}]})
     cog.context_cog.get_context_messages = AsyncMock(return_value=[])
 
-    responses = []
-    async for response in cog.generate_response(message):
-        responses.append(response)
+    response = await cog.generate_response(message)
 
-    assert responses == ["Test response"]
+    assert response == "Test response"
