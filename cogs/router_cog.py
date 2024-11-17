@@ -118,26 +118,37 @@ class RouterCog(commands.Cog):
             await ctx.send("❌ Error updating store setting. Please try again later.")
 
     @commands.command(name='activate')
-    @commands.has_permissions(administrator=True)
-    @commands.guild_only()
     async def activate_command(self, ctx):
-        """Activate the bot in the current channel. Admin only."""
+        """Activate the bot in the current channel."""
         try:
-            if not ctx.guild:
-                await ctx.send("❌ This command can only be used in a server.")
-                return
-
-            guild_id = str(ctx.guild.id)
             channel_id = str(ctx.channel.id)
+            
+            if isinstance(ctx.channel, discord.DMChannel):
+                # Handle DM activation
+                if 'DM' not in self.activated_channels:
+                    self.activated_channels['DM'] = {}
+                
+                if channel_id in self.activated_channels['DM']:
+                    await ctx.send("Bot is already activated in this DM.")
+                    return
 
-            if guild_id not in self.activated_channels:
-                self.activated_channels[guild_id] = {}
+                self.activated_channels['DM'][channel_id] = True
+            else:
+                # Handle guild channel activation
+                if not ctx.author.guild_permissions.administrator:
+                    await ctx.send("❌ You need administrator permissions to use this command in a server.")
+                    return
 
-            if channel_id in self.activated_channels[guild_id]:
-                await ctx.send("Bot is already activated in this channel.")
-                return
+                guild_id = str(ctx.guild.id)
+                if guild_id not in self.activated_channels:
+                    self.activated_channels[guild_id] = {}
 
-            self.activated_channels[guild_id][channel_id] = True
+                if channel_id in self.activated_channels[guild_id]:
+                    await ctx.send("Bot is already activated in this channel.")
+                    return
+
+                self.activated_channels[guild_id][channel_id] = True
+
             self._save_activated_channels(self.activated_channels)
 
             # Update HelpCog's activated channels
@@ -146,32 +157,42 @@ class RouterCog(commands.Cog):
                 help_cog.activated_channels = self.activated_channels
 
             await ctx.send("✅ Bot activated in this channel.")
-            logging.info(f"[Router] Activated channel {channel_id} in guild {guild_id}")
+            logging.info(f"[Router] Activated channel {channel_id}")
 
         except Exception as e:
             logging.error(f"[Router] Error in activate command: {str(e)}")
             await ctx.send("❌ Error activating bot. Please try again later.")
 
     @commands.command(name='deactivate')
-    @commands.has_permissions(administrator=True)
-    @commands.guild_only()
     async def deactivate_command(self, ctx):
-        """Deactivate the bot in the current channel. Admin only."""
+        """Deactivate the bot in the current channel."""
         try:
-            if not ctx.guild:
-                await ctx.send("❌ This command can only be used in a server.")
-                return
-
-            guild_id = str(ctx.guild.id)
             channel_id = str(ctx.channel.id)
 
-            if guild_id not in self.activated_channels or channel_id not in self.activated_channels[guild_id]:
-                await ctx.send("Bot is not activated in this channel.")
-                return
+            if isinstance(ctx.channel, discord.DMChannel):
+                # Handle DM deactivation
+                if 'DM' not in self.activated_channels or channel_id not in self.activated_channels['DM']:
+                    await ctx.send("Bot is not activated in this DM.")
+                    return
 
-            del self.activated_channels[guild_id][channel_id]
-            if not self.activated_channels[guild_id]:
-                del self.activated_channels[guild_id]
+                del self.activated_channels['DM'][channel_id]
+                if not self.activated_channels['DM']:
+                    del self.activated_channels['DM']
+            else:
+                # Handle guild channel deactivation
+                if not ctx.author.guild_permissions.administrator:
+                    await ctx.send("❌ You need administrator permissions to use this command in a server.")
+                    return
+
+                guild_id = str(ctx.guild.id)
+                if guild_id not in self.activated_channels or channel_id not in self.activated_channels[guild_id]:
+                    await ctx.send("Bot is not activated in this channel.")
+                    return
+
+                del self.activated_channels[guild_id][channel_id]
+                if not self.activated_channels[guild_id]:
+                    del self.activated_channels[guild_id]
+
             self._save_activated_channels(self.activated_channels)
 
             # Update HelpCog's activated channels
@@ -180,7 +201,7 @@ class RouterCog(commands.Cog):
                 help_cog.activated_channels = self.activated_channels
 
             await ctx.send("✅ Bot deactivated in this channel.")
-            logging.info(f"[Router] Deactivated channel {channel_id} in guild {guild_id}")
+            logging.info(f"[Router] Deactivated channel {channel_id}")
 
         except Exception as e:
             logging.error(f"[Router] Error in deactivate command: {str(e)}")
@@ -220,12 +241,17 @@ class RouterCog(commands.Cog):
     async def route_message(self, message: discord.Message):
         """Route the message to the appropriate cog based on the model's decision."""
         try:
-            # Check if channel is activated
-            guild_id = str(message.guild.id) if message.guild else None
             channel_id = str(message.channel.id)
+            is_dm = isinstance(message.channel, discord.DMChannel)
 
-            if not guild_id or guild_id not in self.activated_channels or channel_id not in self.activated_channels[guild_id]:
-                return  # Channel not activated
+            # Check if channel is activated
+            if is_dm:
+                if 'DM' not in self.activated_channels or channel_id not in self.activated_channels['DM']:
+                    return  # DM not activated
+            else:
+                guild_id = str(message.guild.id)
+                if guild_id not in self.activated_channels or channel_id not in self.activated_channels[guild_id]:
+                    return  # Channel not activated
 
             # Prepare the system prompt
             system_prompt = self.router_system_prompt
@@ -244,7 +270,7 @@ class RouterCog(commands.Cog):
                 messages=messages,
                 model='meta-llama/llama-3.2-3b-instruct',
                 user_id=str(message.author.id),
-                guild_id=guild_id
+                guild_id=str(message.guild.id) if message.guild else None
             )
 
             # Extract the routing decision
@@ -276,12 +302,6 @@ class RouterCog(commands.Cog):
 
         # Process the message routing
         await self.route_message(message)
-
-    async def cog_check(self, ctx):
-        """Ensure that commands are only used in guilds, except for the 'store' command."""
-        if ctx.command.name == 'store':
-            return True  # Allow 'store' command in DMs
-        return ctx.guild is not None
 
 async def setup(bot):
     await bot.add_cog(RouterCog(bot))
