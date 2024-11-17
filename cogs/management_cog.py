@@ -3,6 +3,7 @@ from discord.ext import commands
 import logging
 from .base_cog import BaseCog
 import json
+import sqlite3
 
 class ManagementCog(BaseCog):
     def __init__(self, bot):
@@ -36,6 +37,42 @@ class ManagementCog(BaseCog):
     def get_temperature(self):
         """Get temperature setting for this agent"""
         return self.temperatures.get(self.name.lower(), 0.7)
+
+    async def ban_user(self, user_id: str) -> bool:
+        """Add a user to the banned users table"""
+        try:
+            db = sqlite3.connect('databases/user_settings.db')
+            cursor = db.cursor()
+            cursor.execute('INSERT OR REPLACE INTO banned_users (user_id) VALUES (?)', (str(user_id),))
+            db.commit()
+            db.close()
+            return True
+        except Exception as e:
+            logging.error(f"Error banning user: {str(e)}")
+            return False
+
+    @commands.hybrid_command(name="optout", description="Opt out of all bot interactions")
+    async def optout(self, ctx):
+        """Opt out of all bot interactions"""
+        try:
+            if await self.ban_user(str(ctx.author.id)):
+                await ctx.send(f"✅ {ctx.author.mention} has been opted out of all bot interactions. Your messages will no longer be processed or stored.", ephemeral=True)
+            else:
+                await ctx.send("❌ Failed to opt out. Please try again later.", ephemeral=True)
+        except Exception as e:
+            logging.error(f"Error in optout command: {str(e)}")
+            await ctx.send("❌ An error occurred while processing your request.", ephemeral=True)
+
+    @commands.Cog.listener()
+    async def on_message(self, message):
+        """Handle !optout command"""
+        if message.author.bot:
+            return
+
+        if message.content.lower() == "!optout":
+            ctx = await self.bot.get_context(message)
+            await self.optout(ctx)
+
     async def generate_response(self, message):
         """Generate a response using openrouter"""
         try:
@@ -100,6 +137,7 @@ class ManagementCog(BaseCog):
         except Exception as e:
             logging.error(f"Error processing message for Management: {e}")
             return None
+
 async def setup(bot):
     try:
         cog = ManagementCog(bot)

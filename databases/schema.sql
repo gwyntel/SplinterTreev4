@@ -53,6 +53,13 @@ CREATE TABLE IF NOT EXISTS user_settings (
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Banned users storage
+CREATE TABLE IF NOT EXISTS banned_users (
+    user_id TEXT PRIMARY KEY,
+    banned_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    reason TEXT DEFAULT 'opt-out'
+);
+
 -- Create indexes for better query performance
 CREATE INDEX IF NOT EXISTS idx_messages_channel ON messages(channel_id);
 CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp);

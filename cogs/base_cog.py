@@ -11,6 +11,7 @@ import re
 import aiohttp
 import asyncio
 import tempfile
+import sqlite3
 from typing import Optional, Dict, AsyncGenerator
 from urllib.parse import urlparse
 
@@ -85,6 +86,19 @@ class BaseCog(commands.Cog):
             logging.warning(f"Failed to load prompt for {self.name}, using default: {str(e)}")
             self.raw_prompt = self.default_prompt
 
+    async def is_user_banned(self, user_id: str) -> bool:
+        """Check if a user is banned from bot interactions"""
+        try:
+            db = sqlite3.connect('databases/user_settings.db')
+            cursor = db.cursor()
+            cursor.execute('SELECT 1 FROM banned_users WHERE user_id = ?', (str(user_id),))
+            result = cursor.fetchone() is not None
+            db.close()
+            return result
+        except Exception as e:
+            logging.error(f"Error checking banned status: {str(e)}")
+            return False
+
     async def update_bot_profile(self, guild: discord.Guild, model_name: str):
         """Update bot's server profile without glitch text"""
         try:
@@ -125,6 +139,10 @@ class BaseCog(commands.Cog):
     async def handle_message(self, message, full_content=None):
         """Handle incoming messages and generate responses"""
         try:
+            # Check if user is banned
+            if await self.is_user_banned(str(message.author.id)):
+                return
+
             # If full_content is not provided, use message.content
             modified_content = full_content or message.content
 
@@ -337,6 +355,10 @@ class BaseCog(commands.Cog):
         """Listen for messages that might trigger this cog"""
         # Skip if message is from a bot
         if message.author.bot:
+            return
+
+        # Check if user is banned
+        if await self.is_user_banned(str(message.author.id)):
             return
 
         # Check if message contains any trigger words
