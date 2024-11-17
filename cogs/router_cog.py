@@ -262,7 +262,7 @@ class RouterCog(commands.Cog):
             logging.error(f"[Router] Error in uptime command: {str(e)}")
             await self.send_response(ctx, "❌ Error getting uptime. Please try again later.")
 
-    async def route_message(self, message: discord.Message):
+    async def handle_message(self, message: discord.Message):
         """Route the message to the appropriate cog based on the model's decision."""
         try:
             channel_id = str(message.channel.id)
@@ -325,15 +325,6 @@ class RouterCog(commands.Cog):
         except Exception as e:
             logging.error(f"[Router] Error routing message: {str(e)}")
             await message.channel.send("❌ An error occurred while processing your message.")
-
-    @commands.Cog.listener()
-    async def on_message(self, message):
-        # Skip if message is from the bot itself
-        if message.author == self.bot.user:
-            return
-
-        # Process the message routing
-        await self.route_message(message)
 
     async def cog_load(self):
         """Called when the cog is loaded. Sync slash commands."""

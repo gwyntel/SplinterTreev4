@@ -147,7 +147,7 @@ async def setup_cogs(bot: SplinterTreeBot):
     await load_context_settings()
 
     # First load core cogs
-    core_cogs = ['context_cog', 'management_cog', 'webhook_cog']
+    core_cogs = ['context_cog', 'management_cog', 'webhook_cog', 'router_cog']
     for cog in core_cogs:
         try:
             await bot.load_extension(f'cogs.{cog}')
@@ -335,16 +335,16 @@ def get_model_from_message(content):
 
 @bot.event
 async def on_message(message):
+    # Skip if message is from this bot
+    if message.author == bot.user:
+        return
+
     # Process commands first
     await bot.process_commands(message)
 
     # Update last interaction
     bot.last_interaction['user'] = message.author.display_name
     bot.last_interaction['time'] = datetime.now(pytz.timezone('US/Pacific'))
-
-    # Skip if message is from this bot
-    if message.author == bot.user:
-        return
 
     # Process attachments
     attachment_contents = []
@@ -356,9 +356,6 @@ async def on_message(message):
     full_content = message.content
     if attachment_contents:
         full_content += "\n" + "\n".join(attachment_contents)
-
-    # Debug logging for message content and attachments
-    logging.debug(f"Received message in channel {message.channel.id}: {full_content}")
 
     # Check if message is a reply to a bot message
     if message.reference and message.reference.message_id:
@@ -377,13 +374,10 @@ async def on_message(message):
         except Exception as e:
             logging.error(f"Error handling reply: {str(e)}")
 
-    # Pass the message to all cogs' on_message methods
-    for cog in bot.cogs.values():
-        if hasattr(cog, 'on_message'):
-            try:
-                await cog.on_message(message)
-            except Exception as e:
-                logging.error(f"Error in {cog.__class__.__name__}.on_message: {e}")
+    # Get the router cog and handle the message
+    router_cog = bot.get_cog('RouterCog')
+    if router_cog:
+        await router_cog.handle_message(message)
 
 @bot.event
 async def on_command_error(ctx, error):
