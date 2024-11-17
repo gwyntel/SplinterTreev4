@@ -224,6 +224,41 @@ class API:
                 await asyncio.sleep(self.min_request_interval - time_since_last)
             self.last_request_time = time.time()
 
+    async def _stream_response(self, stream, requested_at: int, payload: Dict, provider: str, user_id: str, guild_id: str, prompt_file: str, model_cog: str) -> AsyncGenerator[str, None]:
+        """Handle streaming response"""
+        try:
+            async for chunk in stream:
+                if chunk.choices and chunk.choices[0].delta.get('content'):
+                    yield chunk.choices[0].delta['content']
+                elif chunk.choices and chunk.choices[0].delta.get('tool_calls'):
+                    # Handle tool call chunks if present
+                    tool_call = chunk.choices[0].delta['tool_calls'][0]
+                    if 'function' in tool_call:
+                        yield json.dumps(tool_call['function'])
+
+            received_at = int(time.time() * 1000)
+            
+            # Log completion
+            await self.report(
+                requested_at=requested_at,
+                received_at=received_at,
+                req_payload=payload,
+                resp_payload={"choices": [{"message": {"content": "Streaming response completed"}}]},
+                status_code=200,
+                tags={
+                    "source": provider or "openrouter",
+                    "user_id": str(user_id) if user_id else None,
+                    "guild_id": str(guild_id) if guild_id else None,
+                    "prompt_file": prompt_file,
+                    "model_cog": model_cog
+                },
+                user_id=user_id,
+                guild_id=guild_id
+            )
+        except Exception as e:
+            logger.error(f"[API] Error in stream response: {str(e)}")
+            yield f"Error: {str(e)}"
+
     @backoff.on_exception(
         backoff.expo,
         (aiohttp.ClientError, asyncio.TimeoutError, Exception),
@@ -262,35 +297,7 @@ class API:
             if stream:
                 stream = await self.openai_client.chat.completions.create(**payload)
                 requested_at = int(time.time() * 1000)
-                
-                async for chunk in stream:
-                    if chunk.choices and chunk.choices[0].delta.get('content'):
-                        yield chunk.choices[0].delta['content']
-                    elif chunk.choices and chunk.choices[0].delta.get('tool_calls'):
-                        # Handle tool call chunks if present
-                        tool_call = chunk.choices[0].delta['tool_calls'][0]
-                        if 'function' in tool_call:
-                            yield json.dumps(tool_call['function'])
-                
-                received_at = int(time.time() * 1000)
-                
-                # Log completion
-                await self.report(
-                    requested_at=requested_at,
-                    received_at=received_at,
-                    req_payload=payload,
-                    resp_payload={"choices": [{"message": {"content": "Streaming response completed"}}]},
-                    status_code=200,
-                    tags={
-                        "source": provider or "openrouter",
-                        "user_id": str(user_id) if user_id else None,
-                        "guild_id": str(guild_id) if guild_id else None,
-                        "prompt_file": prompt_file,
-                        "model_cog": model_cog
-                    },
-                    user_id=user_id,
-                    guild_id=guild_id
-                )
+                return self._stream_response(stream, requested_at, payload, provider, user_id, guild_id, prompt_file, model_cog)
             else:
                 requested_at = int(time.time() * 1000)
                 response = await self.openai_client.chat.completions.create(**payload)
