@@ -131,8 +131,8 @@ class BaseCog(commands.Cog):
             # Start typing indicator
             await self.start_typing(message.channel)
 
-            # Add message to context
-            if self.context_cog:
+            # Add message to context (skip for DMs)
+            if self.context_cog and message.guild:
                 try:
                     guild_id = str(message.guild.id) if message.guild else None
                     await self.context_cog.add_message_to_context(
@@ -242,8 +242,8 @@ class BaseCog(commands.Cog):
                         except discord.errors.Forbidden:
                             logging.warning(f"[{self.name}] Missing permission to add reaction")
 
-                    # Add response to context
-                    if self.context_cog:
+                    # Add response to context (skip for DMs)
+                    if self.context_cog and message.guild:
                         try:
                             guild_id = str(message.guild.id) if message.guild else None
                             await self.context_cog.add_message_to_context(
@@ -259,19 +259,20 @@ class BaseCog(commands.Cog):
                         except Exception as e:
                             logging.error(f"[{self.name}] Failed to add response to context: {str(e)}")
 
-                    # Log interaction
-                    try:
-                        await log_interaction(
-                            user_id=message.author.id,
-                            guild_id=message.guild.id if message.guild else None,
-                            persona_name=self.name,
-                            user_message=modified_content,
-                            assistant_reply=response,
-                            emotion=emotion,
-                            channel_id=message.channel.id
-                        )
-                    except Exception as e:
-                        logging.error(f"[{self.name}] Failed to log interaction: {e}")
+                    # Log interaction (skip for DMs)
+                    if message.guild:
+                        try:
+                            await log_interaction(
+                                user_id=message.author.id,
+                                guild_id=message.guild.id if message.guild else None,
+                                persona_name=self.name,
+                                user_message=modified_content,
+                                assistant_reply=response,
+                                emotion=emotion,
+                                channel_id=message.channel.id
+                            )
+                        except Exception as e:
+                            logging.error(f"[{self.name}] Failed to log interaction: {e}")
 
                 except Exception as e:
                     logging.error(f"[{self.name}] Error processing response stream: {str(e)}")
