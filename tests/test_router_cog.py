@@ -26,7 +26,7 @@ async def test_generate_response():
     # Create bot mock that will properly handle get_cog
     bot = MagicMock()
     target_cog = MagicMock()
-    target_cog.handle_routed_message = AsyncMock()
+    target_cog.handle_message = AsyncMock()  # Changed from handle_routed_message to handle_message
     bot.get_cog.return_value = target_cog
     
     # Create cog instance with mocked bot
@@ -64,7 +64,7 @@ async def test_generate_response():
 
         # Verify the message was routed to the correct cog
         bot.get_cog.assert_called_once_with('MixtralCog')
-        target_cog.handle_routed_message.assert_called_once_with(message)
+        target_cog.handle_message.assert_called_once_with(message)  # Changed from handle_routed_message to handle_message
 
 @pytest.mark.asyncio
 async def test_store_command_no_option():
