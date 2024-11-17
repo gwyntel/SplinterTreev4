@@ -135,11 +135,12 @@ class ContextCog(commands.Cog):
             if not content or content.isspace():
                 return
 
-            # Check for duplicate content
-            last_msg = self.last_messages.get(channel_id, {}).get('assistant' if is_assistant else 'user')
-            if last_msg and last_msg['content'] == content:
-                logging.debug(f"Skipping duplicate message content in channel {channel_id}")
-                return
+            # Check for duplicate content only for user messages
+            if not is_assistant:
+                last_msg = self.last_messages.get(channel_id, {}).get('user')
+                if last_msg and last_msg['content'] == content:
+                    logging.debug(f"Skipping duplicate user message content in channel {channel_id}")
+                    return
 
             # Get username for the message
             if is_assistant:
