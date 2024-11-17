@@ -10,6 +10,7 @@ import aiohttp
 import asyncio
 from config.webhook_config import load_webhooks, MAX_RETRIES, WEBHOOK_TIMEOUT, DEBUG_LOGGING
 from config import CONTEXT_WINDOWS, DEFAULT_CONTEXT_WINDOW, MAX_CONTEXT_WINDOW
+from bot import get_uptime  # Import the get_uptime function
 
 class HelpCog(commands.Cog, name="Help"):
     """Help commands and channel management"""
@@ -161,11 +162,11 @@ class HelpCog(commands.Cog, name="Help"):
 • `!getcontext` - View current context window size
 • `!resetcontext` - Reset context window to default size (Admin only)
 • `!clearcontext [hours]` - Clear conversation history, optionally specify hours (Admin only)
+• `!activate` - Make the bot respond to every message in the current channel (Admin only)
+• `!deactivate` - Deactivate the bot's response to every message in the current channel (Admin only)
 • `!router_activate` - Activate the router to respond to all messages in the current channel (Admin only)
 • `!router_deactivate` - Deactivate the router in the current channel (Admin only)
 • `!hook <message>` - Send a response through configured Discord webhooks
-• `!channel_activate` - Make the bot respond to every message in the current channel (Admin only)
-• `!channel_deactivate` - Deactivate the bot's response to every message in the current channel (Admin only)
 • `!list_activated` - List all activated channels in the current server (Admin only)
 
 **System Prompt Variables:**
@@ -376,7 +377,7 @@ When setting custom system prompts, you can use these variables:
             logging.error(f"[Help] Error deactivating router: {str(e)}")
             await ctx.reply("❌ Failed to deactivate router")
 
-    @commands.command(name="channel_activate", aliases=["st_activate"])
+    @commands.command(name="channel_activate", aliases=["activate", "st_activate"])
     @commands.has_permissions(manage_messages=True)
     async def activate_channel(self, ctx):
         """Activate the bot to respond to every message in the current channel"""
@@ -405,7 +406,7 @@ When setting custom system prompts, you can use these variables:
             logging.error(f"[Help] Error activating channel: {e}")
             await ctx.reply("❌ Failed to activate channel. Please try again.")
 
-    @commands.command(name="channel_deactivate", aliases=["st_deactivate"])
+    @commands.command(name="channel_deactivate", aliases=["deactivate", "st_deactivate"])
     @commands.has_permissions(manage_messages=True)
     async def channel_deactivate(self, ctx):
         """Deactivate the bot's response to every message in the current channel"""
@@ -536,6 +537,12 @@ When setting custom system prompts, you can use these variables:
         except Exception as e:
             logging.error(f"Error resetting system prompt: {str(e)}")
             await ctx.reply("❌ Failed to reset system prompt. Please try again.")
+
+    @commands.command(name='uptime')
+    async def uptime_command(self, ctx):
+        """Show how long the bot has been running"""
+        uptime = get_uptime()
+        await ctx.reply(f"🕒 Bot has been running for {uptime}")
 
     async def send_to_webhook(self, webhook_url: str, content: str, retries: int = 0) -> bool:
         """

@@ -10,12 +10,23 @@ import aiohttp
 class RouterCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.session = aiohttp.ClientSession()
         self.db_path = 'databases/user_settings.db'
-        asyncio.create_task(self._setup_database())
+        self.session = None  # Will be initialized in cog_load
+
+    async def cog_load(self):
+        """Called when the cog is loaded."""
+        self.session = aiohttp.ClientSession()
+        await self._setup_database()
+        logging.info("RouterCog has been loaded and initialized.")
+
+    async def cog_unload(self):
+        """Called when the cog is unloaded."""
+        if self.session:
+            await self.session.close()
+            logging.info("Closed aiohttp session in RouterCog.")
 
     async def _setup_database(self):
-        """Initialize the SQLite database for user settings"""
+        """Initialize the SQLite database for user settings."""
         try:
             async with aiosqlite.connect(self.db_path) as db:
                 await db.execute('''
@@ -27,12 +38,12 @@ class RouterCog(commands.Cog):
                 )
                 ''')
                 await db.commit()
-                logging.info("User settings database setup completed successfully")
+                logging.info("User settings database setup completed successfully.")
         except Exception as e:
             logging.error(f"Failed to set up user settings database: {str(e)}")
 
     async def get_store_setting(self, user_id: int) -> bool:
-        """Get store setting from database"""
+        """Get store setting from database."""
         async with aiosqlite.connect(self.db_path) as db:
             async with db.execute(
                 'SELECT store_enabled FROM user_settings WHERE user_id = ?',
@@ -46,7 +57,7 @@ class RouterCog(commands.Cog):
                     return False
 
     async def set_store_setting(self, user_id: int, enabled: bool):
-        """Set store setting in database"""
+        """Set store setting in database."""
         async with aiosqlite.connect(self.db_path) as db:
             await db.execute('''
                 INSERT INTO user_settings (user_id, store_enabled, updated_at)
@@ -58,11 +69,17 @@ class RouterCog(commands.Cog):
             await db.commit()
 
     @commands.command(name='store')
-    async def toggle_store(self, ctx, option: str):
-        """Toggle the store setting for the user. Use '!store on' to enable and '!store off' to disable."""
+    async def toggle_store(self, ctx, option: str = None):
+        """Toggle the store setting for the user. Use '!store on' to enable and '!store off' to disable.
+        If no option is provided, display the current store setting."""
         user_id = ctx.author.id
         try:
-            if option.lower() == 'on':
+            if option is None:
+                # No option provided, display current setting
+                is_enabled = await self.get_store_setting(user_id)
+                status = "enabled" if is_enabled else "disabled"
+                await ctx.send(f"Your store setting is currently {status}. Use '!store on' or '!store off' to change it.")
+            elif option.lower() == 'on':
                 await self.set_store_setting(user_id, True)
                 await ctx.send("Store setting enabled for you.")
             elif option.lower() == 'off':
@@ -82,9 +99,9 @@ class RouterCog(commands.Cog):
             logging.error(f"[Router] Error checking store setting: {str(e)}")
             return False
 
-    async def route_message(self, message):
+    async def route_message(self, message: discord.Message):
         """Route the message to the appropriate model."""
-        # Implementation of message routing logic
+        # Placeholder for message routing logic
         pass
 
     @commands.Cog.listener()
@@ -101,9 +118,6 @@ class RouterCog(commands.Cog):
         if ctx.command.name == 'store':
             return True  # Allow 'store' command in DMs
         return ctx.guild is not None
-
-    def cog_unload(self):
-        asyncio.create_task(self.session.close())
 
 async def setup(bot):
     await bot.add_cog(RouterCog(bot))

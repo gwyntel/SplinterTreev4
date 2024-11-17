@@ -10,9 +10,8 @@ import aiohttp
 import backoff
 from contextlib import asynccontextmanager
 from urllib.parse import urlparse, urljoin
-from config import OPENPIPE_API_KEY, OPENPIPE_API_URL, HELICONE_API_KEY
+from config import OPENROUTER_API_KEY, HELICONE_API_KEY
 from openai import AsyncOpenAI
-from concurrent.futures import ThreadPoolExecutor
 
 # Create required directories before configuring logging
 os.makedirs('logs', exist_ok=True)
@@ -67,28 +66,22 @@ class API:
         self.session = aiohttp.ClientSession(
             headers={
                 'HTTP-Referer': 'https://github.com/gwyntel/SplinterTreev4',
-                'X-Title': 'splintertree by GwynTel'
+                'X-Title': 'SplinterTree by GwynTel'
             },
             timeout=timeout
         )
         
-        # Prepare Helicone headers
-        helicone_headers = {
-            'HTTP-Referer': 'https://github.com/gwyntel/SplinterTreev4',
-            'X-Title': 'splintertree by GwynTel',
-            'Helicone-Auth': f'Bearer {HELICONE_API_KEY}' if HELICONE_API_KEY else None,
-            'Helicone-Cache-Enabled': 'true'
-        }
-        helicone_headers = {k: v for k, v in helicone_headers.items() if v is not None}
-        
-        # Initialize OpenPipe client with custom headers including Helicone
-        self.openpipe_client = AsyncOpenAI(
-            api_key=OPENPIPE_API_KEY,
-            base_url=OPENPIPE_API_URL,
-            default_headers=helicone_headers,
+        # Initialize OpenAI client with OpenRouter base URL and OpenRouter API key
+        self.openai_client = AsyncOpenAI(
+            api_key=OPENROUTER_API_KEY,
+            base_url="https://openrouter.ai/api/v1",
+            default_headers={
+                'HTTP-Referer': 'https://github.com/gwyntel/SplinterTreev4',
+                'X-Title': 'SplinterTree by GwynTel',
+            },
             timeout=30.0
         )
-
+        
         # Rate limiting
         self.rate_limit_lock = asyncio.Lock()
         self.last_request_time = 0
@@ -198,22 +191,15 @@ class API:
                             if base64_image:
                                 valid_content.append({
                                     "type": "image_url",
-                                    "image_url": base64_image
+                                    "image_url": {
+                                        "url": base64_image
+                                    }
                                 })
                 normalized_msg['content'] = valid_content
             
             normalized_messages.append(normalized_msg)
         
         return normalized_messages
-
-    def _get_prefixed_model(self, model: str, provider: str = None) -> str:
-        """Get the appropriate model name with prefix based on provider"""
-        if provider == 'openrouter':
-            return f"openpipe:openrouter/{model.replace('openrouter:', '')}"
-        elif provider == 'groq':
-            return f"openpipe:groq/{model.replace('groq:', '')}"
-        
-        return model if not model.startswith('openpipe:') else model
 
     async def _enforce_rate_limit(self):
         """Enforce rate limiting between requests"""
@@ -224,54 +210,44 @@ class API:
                 await asyncio.sleep(self.min_request_interval - time_since_last)
             self.last_request_time = time.time()
 
-    async def _stream_openpipe_request(self, messages, model, temperature, max_tokens, provider=None, user_id=None, guild_id=None, prompt_file=None, model_cog=None):
-        """Stream responses from OpenPipe API with improved error handling"""
-        logger.debug(f"[API] Making OpenPipe streaming request to model: {model}")
+    async def _stream_openrouter_request(self, messages, model, temperature, max_tokens, user_id=None, guild_id=None, prompt_file=None, model_cog=None):
+        """Stream responses from OpenRouter API"""
+        logger.debug(f"[API] Making OpenRouter streaming request to model: {model}")
         
         try:
             await self._enforce_rate_limit()
             
-            openpipe_model = self._get_prefixed_model(model, provider)
             validated_messages = await self._validate_message_roles(messages)
             
             extra_headers = {
                 'HTTP-Referer': 'https://github.com/gwyntel/SplinterTreev4',
-                'X-Title': 'splintertree by GwynTel',
-                'Helicone-Property-UserID': str(user_id) if user_id else None,
-                'Helicone-Property-GuildID': str(guild_id) if guild_id else None,
-                'Helicone-Property-ModelCog': model_cog if model_cog else None,
-                'Helicone-Property-PromptFile': prompt_file if prompt_file else None
+                'X-Title': 'SplinterTree by GwynTel'
             }
-            extra_headers = {k: v for k, v in extra_headers.items() if v is not None}
             
-            if model_cog:
-                extra_headers['X-Model-Cog'] = model_cog
-            
-            stream = await self.openpipe_client.chat.completions.create(
-                model=openpipe_model,
+            stream = await self.openai_client.chat.completions.create(
+                model=model,
                 messages=validated_messages,
                 temperature=temperature if temperature is not None else 0.7,
                 max_tokens=max_tokens if max_tokens is not None else 1000,
                 stream=True,
-                store=True,
                 extra_headers=extra_headers
             )
             requested_at = int(time.time() * 1000)
             
             async for chunk in stream:
-                if chunk.choices[0].delta.content:
-                    yield chunk.choices[0].delta.content
-
+                if chunk.choices and chunk.choices[0].delta.get('content'):
+                    yield chunk.choices[0].delta['content']
+            
             received_at = int(time.time() * 1000)
-
+            
             tags = {
-                "source": "openpipe",
+                "source": "openrouter",
                 "user_id": str(user_id) if user_id else None,
                 "guild_id": str(guild_id) if guild_id else None,
                 "prompt_file": prompt_file,
                 "model_cog": model_cog
             }
-
+            
             completion_obj = {
                 'choices': [{
                     'message': {
@@ -284,7 +260,7 @@ class API:
                 requested_at=requested_at,
                 received_at=received_at,
                 req_payload={
-                    "model": openpipe_model,
+                    "model": model,
                     "messages": validated_messages,
                     "temperature": temperature,
                     "max_tokens": max_tokens
@@ -297,8 +273,8 @@ class API:
             )
         except Exception as e:
             error_message = str(e)
-            logger.error(f"[API] OpenPipe streaming error: {error_message}")
-            raise Exception(f"OpenPipe API error: {error_message}")
+            logger.error(f"[API] OpenRouter streaming error: {error_message}")
+            raise Exception(f"OpenRouter API error: {error_message}")
 
     @backoff.on_exception(
         backoff.expo,
@@ -306,47 +282,36 @@ class API:
         max_tries=5,
         max_time=60
     )
-    async def call_openpipe(self, messages: List[Dict[str, Union[str, List[Dict[str, Any]]]]], model: str, temperature: float = None, stream: bool = False, max_tokens: int = None, provider: str = None, user_id: str = None, guild_id: str = None, prompt_file: str = None, model_cog: str = None) -> Union[Dict, AsyncGenerator[str, None]]:
+    async def call_openrouter(self, messages: List[Dict[str, Union[str, List[Dict[str, Any]]]]], model: str, temperature: float = None, stream: bool = False, max_tokens: int = None, user_id: str = None, guild_id: str = None, prompt_file: str = None, model_cog: str = None) -> Union[Dict, AsyncGenerator[str, None]]:
         try:
             await self._enforce_rate_limit()
             
-            openpipe_model = self._get_prefixed_model(model, provider)
-            
-            logger.debug(f"[API] Making OpenPipe request to model: {openpipe_model}")
+            logger.debug(f"[API] Making OpenRouter request to model: {model}")
             logger.debug(f"[API] Request messages structure:")
             for msg in messages:
                 logger.debug(f"[API] Message role: {msg.get('role')}")
                 logger.debug(f"[API] Message content: {msg.get('content')}")
-
+            
+            validated_messages = await self._validate_message_roles(messages)
+            
             extra_headers = {
                 'HTTP-Referer': 'https://github.com/gwyntel/SplinterTreev4',
-                'X-Title': 'splintertree by GwynTel',
-                'Helicone-Property-UserID': str(user_id) if user_id else None,
-                'Helicone-Property-GuildID': str(guild_id) if guild_id else None,
-                'Helicone-Property-ModelCog': model_cog if model_cog else None,
-                'Helicone-Property-PromptFile': prompt_file if prompt_file else None
+                'X-Title': 'SplinterTree by GwynTel'
             }
-            extra_headers = {k: v for k, v in extra_headers.items() if v is not None}
             
-            if model_cog:
-                extra_headers['X-Model-Cog'] = model_cog
-
             if stream:
-                return self._stream_openpipe_request(messages, model, temperature, max_tokens, provider, user_id, guild_id, prompt_file, model_cog)
+                return self._stream_openrouter_request(messages, model, temperature, max_tokens, user_id, guild_id, prompt_file, model_cog)
             else:
-                validated_messages = await self._validate_message_roles(messages)
-                
                 requested_at = int(time.time() * 1000)
-                response = await self.openpipe_client.chat.completions.create(
-                    model=openpipe_model,
+                response = await self.openai_client.chat.completions.create(
+                    model=model,
                     messages=validated_messages,
                     temperature=temperature if temperature is not None else 0.7,
                     max_tokens=max_tokens if max_tokens is not None else 1000,
-                    store=True,
                     extra_headers=extra_headers
                 )
                 received_at = int(time.time() * 1000)
-
+                
                 result = {
                     'choices': [{
                         'message': {
@@ -354,20 +319,20 @@ class API:
                         }
                     }]
                 }
-
+                
                 tags = {
-                    "source": "openpipe",
+                    "source": "openrouter",
                     "user_id": str(user_id) if user_id else None,
                     "guild_id": str(guild_id) if guild_id else None,
                     "prompt_file": prompt_file,
                     "model_cog": model_cog
                 }
-
+                
                 await self.report(
                     requested_at=requested_at,
                     received_at=received_at,
                     req_payload={
-                        "model": openpipe_model,
+                        "model": model,
                         "messages": validated_messages,
                         "temperature": temperature,
                         "max_tokens": max_tokens
@@ -378,28 +343,13 @@ class API:
                     user_id=user_id,
                     guild_id=guild_id
                 )
-
+                
                 return result
-
+            
         except Exception as e:
             error_message = str(e)
-            logger.error(f"[API] OpenPipe error: {error_message}")
-            raise Exception(f"OpenPipe API error: {error_message}")
-
-    async def call_openrouter(self, messages: List[Dict[str, Union[str, List[Dict[str, Any]]]]], model: str, temperature: float = None, stream: bool = False, max_tokens: int = None, user_id: str = None, guild_id: str = None, prompt_file: str = None, model_cog: str = None) -> Union[Dict, AsyncGenerator[str, None]]:
-        """Redirect OpenRouter calls to OpenPipe with 'openrouter' provider"""
-        return await self.call_openpipe(
-            messages=messages, 
-            model=model, 
-            temperature=temperature, 
-            stream=stream, 
-            max_tokens=max_tokens, 
-            provider='openrouter',
-            user_id=user_id,
-            guild_id=guild_id,
-            prompt_file=prompt_file,
-            model_cog=model_cog
-        )
+            logger.error(f"[API] OpenRouter error: {error_message}")
+            raise Exception(f"OpenRouter API error: {error_message}")
 
     async def report(self, requested_at: int, received_at: int, req_payload: Dict, resp_payload: Dict, status_code: int, tags: Dict = None, user_id: str = None, guild_id: str = None):
         """Report interaction metrics with improved error handling"""

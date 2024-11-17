@@ -3,20 +3,16 @@ from unittest.mock import MagicMock, AsyncMock
 from cogs.router_cog import RouterCog
 
 @pytest.fixture
-def cog():
+def cog(event_loop):
     bot = MagicMock()
-    bot.api_client = MagicMock()
     context_cog = MagicMock()
     context_cog.get_context_messages = AsyncMock(return_value=[])
     bot.get_cog.return_value = context_cog
 
     # Create RouterCog instance
     cog = RouterCog(bot)
-
-    # Mock database methods
-    cog._init_db = AsyncMock()
-    cog.get_store_setting = AsyncMock(return_value=False)
-    cog.set_store_setting = AsyncMock()
+    # Run cog_load to initialize session and other async setups
+    event_loop.run_until_complete(cog.cog_load())
 
     return cog
 
@@ -31,45 +27,53 @@ async def test_generate_response(cog):
     message.guild = MagicMock()
     message.guild.id = 101112
 
-    cog.api_client.call_openrouter = AsyncMock(return_value={'choices': [{'message': {'content': 'Test response'}}]})
+    # Mock the HTTP POST request to return a dummy response
+    mock_response = MagicMock()
+    mock_response.json = AsyncMock(return_value={
+        'choices': [{'message': {'content': 'Test response'}}]
+    })
+    cog.session.post = AsyncMock(return_value=mock_response)
 
-    response = await cog.generate_response(message)
+    # Mock message.channel.send to assert it was called
+    message.channel.send = AsyncMock()
 
-    # Since _generate_response now yields "Test response", we need to consume the generator
-    response_text = ""
-    async for chunk in response:
-        response_text += chunk
+    await cog.route_message(message)
 
-    assert response_text == "Test response"
+    # Assert that a response was sent
+    message.channel.send.assert_called_with('Test response')
 
 @pytest.mark.asyncio
 async def test_store_on_command(cog):
-    """Test the !store on command to enable the store setting for a user."""
-    # Create context mock
+    """Test the '!store on' command."""
     ctx = MagicMock()
     ctx.author.id = 789
     ctx.send = AsyncMock()
+    ctx.command.name = 'store'
+    ctx.guild = None  # Simulate DM
 
-    # Test store on command
-    option = "on"
-    await cog.toggle_store.callback(cog, ctx, option)
+    await cog.toggle_store(ctx, 'on')
 
-    # Verify the database was updated
-    cog.set_store_setting.assert_called_once_with(789, True)
+    # Verify that the user setting is updated
+    enabled = await cog.get_store_setting(ctx.author.id)
+    assert enabled is True
+
+    # Verify confirmation message
     ctx.send.assert_called_with("Store setting enabled for you.")
 
 @pytest.mark.asyncio
 async def test_store_off_command(cog):
-    """Test the !store off command to disable the store setting for a user."""
-    # Create context mock
+    """Test the '!store off' command."""
     ctx = MagicMock()
     ctx.author.id = 789
     ctx.send = AsyncMock()
+    ctx.command.name = 'store'
+    ctx.guild = None  # Simulate DM
 
-    # Test store off command
-    option = "off"
-    await cog.toggle_store.callback(cog, ctx, option)
+    await cog.toggle_store(ctx, 'off')
 
-    # Verify the database was updated
-    cog.set_store_setting.assert_called_once_with(789, False)
+    # Verify that the user setting is updated
+    enabled = await cog.get_store_setting(ctx.author.id)
+    assert enabled is False
+
+    # Verify confirmation message
     ctx.send.assert_called_with("Store setting disabled for you.")
