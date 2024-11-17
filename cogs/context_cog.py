@@ -23,6 +23,8 @@ class ContextCog(commands.Cog):
         )
         # Track last message per role to prevent duplicates
         self.last_messages = {}  # Format: {channel_id: {'user': msg, 'assistant': msg}}
+        # Track current message being built from stream
+        self.current_stream = {}  # Format: {channel_id: {'content': str, 'message_id': str}}
 
     def _setup_database(self):
         """Initialize the SQLite database for interaction logs"""
@@ -135,11 +137,56 @@ class ContextCog(commands.Cog):
             if not content or content.isspace():
                 return
 
-            # Check for duplicate content only for user messages
-            if not is_assistant:
+            # For assistant messages, accumulate content if it's part of a stream
+            if is_assistant:
+                if channel_id not in self.current_stream:
+                    self.current_stream[channel_id] = {'content': content, 'message_id': message_id}
+                else:
+                    # If this is a new message ID, store the previous one and start fresh
+                    if message_id != self.current_stream[channel_id]['message_id']:
+                        # Store the completed message
+                        await self._store_message(
+                            self.current_stream[channel_id]['message_id'],
+                            channel_id,
+                            guild_id,
+                            user_id,
+                            self.current_stream[channel_id]['content'],
+                            is_assistant,
+                            persona_name,
+                            emotion
+                        )
+                        # Start new message
+                        self.current_stream[channel_id] = {'content': content, 'message_id': message_id}
+                    else:
+                        # Append to current message
+                        self.current_stream[channel_id]['content'] += content
+                        # Store the updated message
+                        await self._store_message(
+                            message_id,
+                            channel_id,
+                            guild_id,
+                            user_id,
+                            self.current_stream[channel_id]['content'],
+                            is_assistant,
+                            persona_name,
+                            emotion
+                        )
+                return
+
+            # For user messages, store directly
+            await self._store_message(message_id, channel_id, guild_id, user_id, content, is_assistant, persona_name, emotion)
+
+        except Exception as e:
+            logging.error(f"Failed to add message to context: {str(e)}")
+
+    async def _store_message(self, message_id, channel_id, guild_id, user_id, content, is_assistant, persona_name=None, emotion=None):
+        """Store a message in the database"""
+        try:
+            # Check for duplicate content
+            if not is_assistant:  # Only check duplicates for user messages
                 last_msg = self.last_messages.get(channel_id, {}).get('user')
                 if last_msg and last_msg['content'] == content:
-                    logging.debug(f"Skipping duplicate user message content in channel {channel_id}")
+                    logging.debug(f"Skipping duplicate message content in channel {channel_id}")
                     return
 
             # Get username for the message
@@ -166,24 +213,33 @@ class ContextCog(commands.Cog):
                 
                 existing = cursor.fetchone()
                 if existing:
-                    logging.debug(f"Message {message_id} already exists in context")
-                    return
-                
-                cursor.execute('''
-                INSERT INTO messages 
-                (discord_message_id, channel_id, guild_id, user_id, content, is_assistant, persona_name, emotion, timestamp)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (
-                    str(message_id), 
-                    str(channel_id), 
-                    str(guild_id) if guild_id else None, 
-                    str(user_id), 
-                    prefixed_content,  # Store the prefixed content
-                    is_assistant, 
-                    persona_name, 
-                    emotion, 
-                    datetime.now().isoformat()
-                ))
+                    # For assistant messages, update the content to include new chunks
+                    if is_assistant:
+                        cursor.execute('''
+                        UPDATE messages 
+                        SET content = ?, 
+                            emotion = COALESCE(?, emotion)
+                        WHERE discord_message_id = ?
+                        ''', (prefixed_content, emotion, str(message_id)))
+                    else:
+                        logging.debug(f"Message {message_id} already exists in context")
+                        return
+                else:
+                    cursor.execute('''
+                    INSERT INTO messages 
+                    (discord_message_id, channel_id, guild_id, user_id, content, is_assistant, persona_name, emotion, timestamp)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (
+                        str(message_id), 
+                        str(channel_id), 
+                        str(guild_id) if guild_id else None, 
+                        str(user_id), 
+                        prefixed_content,  # Store the prefixed content
+                        is_assistant, 
+                        persona_name, 
+                        emotion, 
+                        datetime.now().isoformat()
+                    ))
                 
                 conn.commit()
 
@@ -197,7 +253,7 @@ class ContextCog(commands.Cog):
 
             logging.debug(f"Added message to context: {message_id} in channel {channel_id}")
         except Exception as e:
-            logging.error(f"Failed to add message to context: {str(e)}")
+            logging.error(f"Failed to store message in context: {str(e)}")
 
     @commands.Cog.listener()
     async def on_message(self, message):

@@ -300,8 +300,45 @@ class API:
             if stream:
                 stream = await self.openai_client.chat.completions.create(**payload)
                 requested_at = int(time.time() * 1000)
-                async for chunk in self._stream_response(stream, requested_at, payload, provider, user_id, guild_id, prompt_file, model_cog):
-                    yield chunk
+                
+                async def stream_generator():
+                    try:
+                        async for chunk in stream:
+                            if chunk.choices and hasattr(chunk.choices[0].delta, 'content') and chunk.choices[0].delta.content is not None:
+                                yield chunk.choices[0].delta.content
+                            elif chunk.choices and hasattr(chunk.choices[0].delta, 'tool_calls') and chunk.choices[0].delta.tool_calls:
+                                # Handle tool call chunks if present
+                                tool_call = chunk.choices[0].delta.tool_calls[0]
+                                if hasattr(tool_call, 'function'):
+                                    yield json.dumps({
+                                        'name': tool_call.function.name if hasattr(tool_call.function, 'name') else None,
+                                        'arguments': tool_call.function.arguments if hasattr(tool_call.function, 'arguments') else None
+                                    })
+
+                        received_at = int(time.time() * 1000)
+                        
+                        # Log completion
+                        await self.report(
+                            requested_at=requested_at,
+                            received_at=received_at,
+                            req_payload=payload,
+                            resp_payload={"choices": [{"message": {"content": "Streaming response completed"}}]},
+                            status_code=200,
+                            tags={
+                                "source": provider or "openrouter",
+                                "user_id": str(user_id) if user_id else None,
+                                "guild_id": str(guild_id) if guild_id else None,
+                                "prompt_file": prompt_file,
+                                "model_cog": model_cog
+                            },
+                            user_id=user_id,
+                            guild_id=guild_id
+                        )
+                    except Exception as e:
+                        logger.error(f"[API] Error in stream response: {str(e)}")
+                        yield f"Error: {str(e)}"
+
+                return stream_generator()
             else:
                 requested_at = int(time.time() * 1000)
                 response = await self.openai_client.chat.completions.create(**payload)
