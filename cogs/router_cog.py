@@ -13,20 +13,32 @@ class RouterCog(commands.Cog):
         self.db_path = 'databases/user_settings.db'
         self.start_time = datetime.now(timezone.utc)
         self.activated_channels = self._load_activated_channels()
+        # Load the system prompt
+        self.router_system_prompt = self._load_router_system_prompt()
+
+    def _load_router_system_prompt(self):
+        """Load the router system prompt from a file or return the default."""
+        try:
+            with open('router_system_prompt.txt', 'r') as f:
+                prompt = f.read()
+            return prompt
+        except FileNotFoundError:
+            logging.error("[Router] System prompt file not found.")
+            return ""
 
     def _load_activated_channels(self) -> dict:
         """Load activated channels from file"""
         try:
             with open('activated_channels.json', 'r') as f:
                 channels = json.load(f)
-            logging.info(f"[Help] Loaded activated channels: {channels}")
-            return channels
+                logging.info(f"[Router] Loaded activated channels: {channels}")
+                return channels
         except FileNotFoundError:
-            logging.info("[Help] No activated channels file found, creating new one")
+            logging.info("[Router] No activated channels file found, creating new one")
             self._save_activated_channels({})
             return {}
         except Exception as e:
-            logging.error(f"[Help] Error loading activated channels: {e}")
+            logging.error(f"[Router] Error loading activated channels: {e}")
             return {}
 
     def _save_activated_channels(self, channels: dict):
@@ -35,7 +47,7 @@ class RouterCog(commands.Cog):
             with open('activated_channels.json', 'w') as f:
                 json.dump(channels, f)
         except Exception as e:
-            logging.error(f"[Help] Error saving activated channels: {e}")
+            logging.error(f"[Router] Error saving activated channels: {e}")
 
     async def _setup_database(self):
         """Initialize the SQLite database for user settings."""
@@ -155,13 +167,13 @@ class RouterCog(commands.Cog):
         try:
             current_time = datetime.now(timezone.utc)
             delta = current_time - self.start_time
-            
+
             # Calculate time components
             days = delta.days
             hours = delta.seconds // 3600
             minutes = (delta.seconds % 3600) // 60
             seconds = delta.seconds % 60
-            
+
             # Build uptime string
             uptime_parts = []
             if days > 0:
@@ -172,7 +184,7 @@ class RouterCog(commands.Cog):
                 uptime_parts.append(f"{minutes} minute{'s' if minutes != 1 else ''}")
             if seconds > 0 or not uptime_parts:
                 uptime_parts.append(f"{seconds} second{'s' if seconds != 1 else ''}")
-            
+
             uptime_str = ", ".join(uptime_parts)
             await ctx.send(f"Bot has been running for {uptime_str}.")
 
@@ -181,30 +193,52 @@ class RouterCog(commands.Cog):
             await ctx.send("❌ Error getting uptime. Please try again later.")
 
     async def route_message(self, message: discord.Message):
-        """Route the message to the appropriate model."""
+        """Route the message to the appropriate cog based on the model's decision."""
         try:
             # Check if channel is activated
             guild_id = str(message.guild.id) if message.guild else None
             channel_id = str(message.channel.id)
-            
+
             if not guild_id or guild_id not in self.activated_channels or channel_id not in self.activated_channels[guild_id]:
                 return  # Channel not activated
 
-            # Use the API singleton to make the request
+            # Prepare the system prompt
+            system_prompt = self.router_system_prompt
+
+            # Format the system prompt with the user message (and context if available)
+            formatted_prompt = system_prompt.replace("{user_message}", message.content).replace("{context}", "")  # Add context if available
+
+            # Prepare messages for the model
+            messages = [
+                {"role": "system", "content": formatted_prompt},
+                {"role": "user", "content": message.content}
+            ]
+
+            # Call the routing model
             response = await api.call_openpipe(
-                messages=[{'role': 'user', 'content': message.content}],
-                model='mistralai/mixtral-8x7b-instruct',
+                messages=messages,
+                model='meta-llama/llama-3.2-3b-instruct',
                 user_id=str(message.author.id),
                 guild_id=guild_id
             )
-            
-            # Extract content from response
+
+            # Extract the routing decision
             if response and 'choices' in response and len(response['choices']) > 0:
-                content = response['choices'][0]['message']['content']
-                await message.channel.send(content)
+                routing_response = response['choices'][0]['message']['content']
+                # Clean up the response to get the cog name
+                cog_name = routing_response.strip()
+
+                # Attempt to get the cog
+                cog = self.bot.get_cog(cog_name + "Cog")
+                if cog and hasattr(cog, 'handle_routed_message'):
+                    # Forward the message to the cog
+                    await cog.handle_routed_message(message)
+                else:
+                    await message.channel.send("❌ Unable to route message to the appropriate module.")
+                    logging.error(f"[Router] Cog '{cog_name}Cog' not found or 'handle_routed_message' not implemented.")
             else:
                 await message.channel.send("❌ Failed to process message. Please try again later.")
-                
+
         except Exception as e:
             logging.error(f"[Router] Error routing message: {str(e)}")
             await message.channel.send("❌ An error occurred while processing your message.")
