@@ -141,6 +141,14 @@ async def setup_cogs(bot: SplinterTreeBot):
         logging.info("Cogs have already been loaded. Skipping setup.")
         return
 
+    # Initialize API first
+    try:
+        await bot.api_client.setup()
+        logging.info("API client initialized successfully")
+    except Exception as e:
+        logging.error(f"Failed to initialize API client: {str(e)}")
+        return
+
     bot.loaded_cogs = []  # Reset loaded cogs list
 
     # Load context settings

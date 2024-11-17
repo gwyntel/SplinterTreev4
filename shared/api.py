@@ -58,38 +58,57 @@ class DatabasePool:
         self.executor.shutdown()
 
 class API:
-    def __init__(self):
-        # Initialize database pool
-        self.db_pool = DatabasePool('databases/interaction_logs.db')
-        
-        # Initialize aiohttp session with custom headers and timeout
-        timeout = aiohttp.ClientTimeout(total=30, connect=10, sock_read=10)
-        self.session = aiohttp.ClientSession(
-            headers={
-                'HTTP-Referer': 'https://github.com/gwyntel/SplinterTreev4',
-                'X-Title': 'SplinterTree by GwynTel'
-            },
-            timeout=timeout
-        )
-        
-        # Initialize OpenAI client with OpenRouter base URL
-        self.openai_client = AsyncOpenAI(
-            api_key=OPENROUTER_API_KEY,
-            base_url="https://openrouter.ai/api/v1",
-            default_headers={
-                'HTTP-Referer': 'https://github.com/gwyntel/SplinterTreev4',
-                'X-Title': 'SplinterTree by GwynTel',
-            },
-            timeout=30.0
-        )
-        
-        # Rate limiting
-        self.rate_limit_lock = asyncio.Lock()
-        self.last_request_time = 0
-        self.min_request_interval = 0.1  # 100ms between requests
+    _instance = None
+    _initialized = False
 
-        # Initialize database schema
-        self._init_db()
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
+    def __init__(self):
+        if not self._initialized:
+            # Initialize database pool
+            self.db_pool = DatabasePool('databases/interaction_logs.db')
+            
+            # Initialize rate limiting
+            self.rate_limit_lock = asyncio.Lock()
+            self.last_request_time = 0
+            self.min_request_interval = 0.1  # 100ms between requests
+
+            # Initialize database schema
+            self._init_db()
+            
+            # Mark as initialized
+            self._initialized = True
+            
+            # These will be initialized in setup()
+            self.session = None
+            self.openai_client = None
+
+    async def setup(self):
+        """Async initialization"""
+        if self.session is None:
+            # Initialize aiohttp session with custom headers and timeout
+            timeout = aiohttp.ClientTimeout(total=30, connect=10, sock_read=10)
+            self.session = aiohttp.ClientSession(
+                headers={
+                    'HTTP-Referer': 'https://github.com/gwyntel/SplinterTreev4',
+                    'X-Title': 'SplinterTree by GwynTel'
+                },
+                timeout=timeout
+            )
+            
+            # Initialize OpenAI client with OpenRouter base URL
+            self.openai_client = AsyncOpenAI(
+                api_key=OPENROUTER_API_KEY,
+                base_url="https://openrouter.ai/api/v1",
+                default_headers={
+                    'HTTP-Referer': 'https://github.com/gwyntel/SplinterTreev4',
+                    'X-Title': 'SplinterTree by GwynTel',
+                },
+                timeout=30.0
+            )
 
     def _init_db(self):
         """Initialize database schema"""
@@ -108,8 +127,12 @@ class API:
                     conn.commit()
             
             # Run schema initialization in event loop
-            loop = asyncio.get_event_loop()
-            loop.run_until_complete(init_schema())
+            if asyncio.get_event_loop().is_running():
+                asyncio.create_task(init_schema())
+            else:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                loop.run_until_complete(init_schema())
             logger.info("[API] Successfully initialized database schema")
         except Exception as e:
             logger.error(f"[API] Failed to initialize database schema: {str(e)}")
@@ -117,6 +140,9 @@ class API:
 
     async def _download_image(self, url: str) -> Optional[bytes]:
         """Download image from URL with timeout and retries"""
+        if self.session is None:
+            await self.setup()
+
         @backoff.on_exception(
             backoff.expo,
             (aiohttp.ClientError, asyncio.TimeoutError),
@@ -166,6 +192,9 @@ class API:
 
     async def _validate_message_roles(self, messages: List[Dict]) -> List[Dict]:
         """Validate and normalize message roles for API compatibility"""
+        if self.session is None:
+            await self.setup()
+
         valid_roles = {"system", "user", "assistant", "tool"}
         normalized_messages = []
         
@@ -270,6 +299,9 @@ class API:
     )
     async def call_openpipe(self, messages: List[Dict[str, Union[str, List[Dict[str, Any]]]]], model: str, temperature: float = None, stream: bool = False, max_tokens: int = None, provider: str = None, user_id: str = None, guild_id: str = None, prompt_file: str = None, model_cog: str = None, tools: List[Dict] = None, tool_choice: Union[str, Dict] = None) -> Union[Dict, AsyncGenerator[str, None]]:
         """Call OpenRouter API with support for all features"""
+        if self.session is None:
+            await self.setup()
+
         try:
             await self._enforce_rate_limit()
             
@@ -300,45 +332,7 @@ class API:
             if stream:
                 stream = await self.openai_client.chat.completions.create(**payload)
                 requested_at = int(time.time() * 1000)
-                
-                async def stream_generator():
-                    try:
-                        async for chunk in stream:
-                            if chunk.choices and hasattr(chunk.choices[0].delta, 'content') and chunk.choices[0].delta.content is not None:
-                                yield chunk.choices[0].delta.content
-                            elif chunk.choices and hasattr(chunk.choices[0].delta, 'tool_calls') and chunk.choices[0].delta.tool_calls:
-                                # Handle tool call chunks if present
-                                tool_call = chunk.choices[0].delta.tool_calls[0]
-                                if hasattr(tool_call, 'function'):
-                                    yield json.dumps({
-                                        'name': tool_call.function.name if hasattr(tool_call.function, 'name') else None,
-                                        'arguments': tool_call.function.arguments if hasattr(tool_call.function, 'arguments') else None
-                                    })
-
-                        received_at = int(time.time() * 1000)
-                        
-                        # Log completion
-                        await self.report(
-                            requested_at=requested_at,
-                            received_at=received_at,
-                            req_payload=payload,
-                            resp_payload={"choices": [{"message": {"content": "Streaming response completed"}}]},
-                            status_code=200,
-                            tags={
-                                "source": provider or "openrouter",
-                                "user_id": str(user_id) if user_id else None,
-                                "guild_id": str(guild_id) if guild_id else None,
-                                "prompt_file": prompt_file,
-                                "model_cog": model_cog
-                            },
-                            user_id=user_id,
-                            guild_id=guild_id
-                        )
-                    except Exception as e:
-                        logger.error(f"[API] Error in stream response: {str(e)}")
-                        yield f"Error: {str(e)}"
-
-                return stream_generator()
+                return self._stream_response(stream, requested_at, payload, provider, user_id, guild_id, prompt_file, model_cog)
             else:
                 requested_at = int(time.time() * 1000)
                 response = await self.openai_client.chat.completions.create(**payload)
@@ -422,7 +416,8 @@ class API:
 
     async def close(self):
         """Cleanup resources"""
-        await self.session.close()
+        if self.session:
+            await self.session.close()
         await self.db_pool.close()
 
 # Global API instance
