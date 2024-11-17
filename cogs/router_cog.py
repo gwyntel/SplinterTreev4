@@ -16,6 +16,10 @@ class RouterCog(commands.Cog):
         # Load the system prompt
         self.router_system_prompt = self._load_router_system_prompt()
 
+        # Set default permissions for slash commands
+        self.activate_command.default_permissions = discord.Permissions(administrator=True)
+        self.deactivate_command.default_permissions = discord.Permissions(administrator=True)
+
     def _load_router_system_prompt(self):
         """Load the router system prompt from a file or return the default."""
         try:
