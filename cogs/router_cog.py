@@ -230,12 +230,12 @@ class RouterCog(commands.Cog):
 
                 # Attempt to get the cog
                 cog = self.bot.get_cog(cog_name + "Cog")
-                if cog and hasattr(cog, 'handle_routed_message'):
+                if cog and hasattr(cog, 'handle_message'):  # Changed from handle_routed_message to handle_message
                     # Forward the message to the cog
-                    await cog.handle_routed_message(message)
+                    await cog.handle_message(message)  # Changed from handle_routed_message to handle_message
                 else:
                     await message.channel.send("❌ Unable to route message to the appropriate module.")
-                    logging.error(f"[Router] Cog '{cog_name}Cog' not found or 'handle_routed_message' not implemented.")
+                    logging.error(f"[Router] Cog '{cog_name}Cog' not found or 'handle_message' not implemented.")
             else:
                 await message.channel.send("❌ Failed to process message. Please try again later.")
 
