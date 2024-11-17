@@ -52,10 +52,31 @@ class SplinterTreeBot(commands.Bot):
         self.cogs_loaded = False  # Flag to prevent multiple cog setups
         self.last_status_check = 0  # Track last status check time
         self.current_status = None  # Track current custom status
+        self.tree.on_error = self.on_app_command_error  # Set up error handler for slash commands
 
     async def process_commands(self, message):
         ctx = await self.get_context(message)
         await self.invoke(ctx)
+
+    async def on_app_command_error(self, interaction: discord.Interaction, error: discord.app_commands.AppCommandError):
+        """Handle slash command errors"""
+        if isinstance(error, discord.app_commands.CommandOnCooldown):
+            await interaction.response.send_message(
+                f"⏳ This command is on cooldown. Please try again in {error.retry_after:.2f} seconds.",
+                ephemeral=True
+            )
+        elif isinstance(error, discord.app_commands.MissingPermissions):
+            await interaction.response.send_message(
+                "❌ You don't have permission to use this command.",
+                ephemeral=True
+            )
+        else:
+            logging.error(f"Slash command error: {str(error)}")
+            logging.error(traceback.format_exc())
+            await interaction.response.send_message(
+                "❌ An error occurred while executing the command.",
+                ephemeral=True
+            )
 
     def get_uptime_enabled(self):
         """Get uptime status toggle state"""
@@ -92,6 +113,15 @@ class SplinterTreeBot(commands.Bot):
                 
         except Exception as e:
             logging.error(f"Error checking status file: {e}")
+
+    async def setup_hook(self):
+        """A coroutine to be called to setup the bot, by default this is blank."""
+        # Sync commands with Discord
+        try:
+            await self.tree.sync()
+            logging.info("Successfully synced slash commands")
+        except Exception as e:
+            logging.error(f"Failed to sync slash commands: {e}")
 
 async def load_context_settings():
     """Load saved context window settings"""
@@ -163,6 +193,13 @@ async def setup_cogs(bot: SplinterTreeBot):
     except Exception as e:
         logging.error(f"Failed to load help cog: {str(e)}")
         logging.error(traceback.format_exc())
+
+    # Sync slash commands after all cogs are loaded
+    try:
+        await bot.tree.sync()
+        logging.info("Successfully synced slash commands after loading cogs")
+    except Exception as e:
+        logging.error(f"Failed to sync slash commands after loading cogs: {e}")
 
     logging.info(f"Total loaded cogs with handle_message: {len(bot.loaded_cogs)}")
     for cog in bot.loaded_cogs:
@@ -361,53 +398,6 @@ async def on_command_error(ctx, error):
         logging.error(f"Command error: {str(error)}")
         logging.error(traceback.format_exc())
         await ctx.reply("❌ An error occurred while executing the command.")
-
-def load_processed_messages():
-    """Load processed messages from file"""
-    if os.path.exists(PROCESSED_MESSAGES_FILE):
-        try:
-            with open(PROCESSED_MESSAGES_FILE, 'r') as f:
-                bot.processed_messages = set(json.load(f))
-            logging.info(f"Loaded {len(bot.processed_messages)} processed messages from file")
-        except Exception as e:
-            logging.error(f"Error loading processed messages: {str(e)}")
-
-def save_processed_messages():
-    """Save processed messages to file"""
-    try:
-        with open(PROCESSED_MESSAGES_FILE, 'w') as f:
-            json.dump(list(bot.processed_messages), f)
-        logging.info(f"Saved {len(bot.processed_messages)} processed messages to file")
-    except Exception as e:
-        logging.error(f"Error saving processed messages: {str(e)}")
-
-def get_history_file(channel_id: str) -> str:
-    """Get the history file path for a channel"""
-    history_dir = os.path.join(BOT_DIR, 'history')
-    if not os.path.exists(history_dir):
-        os.makedirs(history_dir)
-    return os.path.join(history_dir, f'history_{channel_id}.json')
-
-def get_uptime():
-    """Get bot uptime as a formatted string"""
-    if bot.start_time is None:
-        return "Unknown"
-    pst = pytz.timezone('US/Pacific')
-    current_time = datetime.now(pst)
-    uptime = current_time - bot.start_time.astimezone(pst)
-    days = uptime.days
-    hours, remainder = divmod(uptime.seconds, 3600)
-    minutes, seconds = divmod(remainder, 60)
-    parts = []
-    if days > 0:
-        parts.append(f"{days}d")
-    if hours > 0:
-        parts.append(f"{hours}h")
-    if minutes > 0:
-        parts.append(f"{minutes}m")
-    if seconds > 0 or not parts:
-        parts.append(f"{seconds}s")
-    return " ".join(parts)
 
 # Run bot
 if __name__ == "__main__":

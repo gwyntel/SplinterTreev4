@@ -10,7 +10,7 @@ import aiohttp
 import asyncio
 from config.webhook_config import load_webhooks, MAX_RETRIES, WEBHOOK_TIMEOUT, DEBUG_LOGGING
 from config import CONTEXT_WINDOWS, DEFAULT_CONTEXT_WINDOW, MAX_CONTEXT_WINDOW
-from bot import get_uptime  # Import the get_uptime function
+from bot import get_uptime
 
 class HelpCog(commands.Cog, name="Help"):
     """Help commands and channel management"""
@@ -40,15 +40,6 @@ class HelpCog(commands.Cog, name="Help"):
         except Exception as e:
             logging.error(f"[Help] Error loading activated channels: {e}")
             return {}
-
-    def save_activated_channels(self):
-        """Save activated channels to JSON file"""
-        try:
-            with open(self.activated_channels_file, 'w') as f:
-                json.dump(self.activated_channels, f, indent=4)
-            logging.info(f"[Help] Saved activated channels: {self.activated_channels}")
-        except Exception as e:
-            logging.error(f"[Help] Error saving activated channels: {e}")
 
     def get_all_models(self):
         """Get all models and their details from registered cogs"""
@@ -119,9 +110,9 @@ class HelpCog(commands.Cog, name="Help"):
 
         return model_list
 
-    @commands.command(name="help", aliases=["st_help"])
+    @commands.hybrid_command(name="help", with_app_command=True)
     async def help_command(self, ctx):
-        """Send a comprehensive help message with all available features"""
+        """Show all available commands and features. Use /help or !help"""
         try:
             # Get dynamically loaded models
             vision_models, models = self.get_all_models()
@@ -134,7 +125,7 @@ class HelpCog(commands.Cog, name="Help"):
 • **Intelligent Message Routing** - Routes messages to appropriate models based on content
 • **Emotion Analysis** - Provides emotion analysis and interaction logging
 • **Dynamic System Prompts** - Customizable per-channel system prompts with variable support
-• **Webhook Integration** - Send responses through configured Discord webhooks using `!hook`
+• **Webhook Integration** - Send responses through configured Discord webhooks using `/hook` or `!hook`
 • **Administrative Commands** - Manage bot status and channel configurations
 • **Database Interactions** - Manages SQLite database interactions for context and logging
 • **Error Handling and Logging** - Enhanced error reporting for better troubleshooting
@@ -142,30 +133,31 @@ class HelpCog(commands.Cog, name="Help"):
 **💡 Tips:**
 1. Models will respond when you mention their trigger words (e.g., 'nemotron', 'gemini')
 2. Each model has unique strengths - try different ones for different tasks
-3. Use `!listmodels` to see a simple list of available models
-4. Use `!list_agents` to get detailed information about each agent
+3. Use `/listmodels` or `!listmodels` to see a simple list of available models
+4. Use `/list_agents` or `!list_agents` to get detailed information about each agent
 5. For private responses, you can DM the bot directly
-6. To activate the bot in a channel, use `!activate` (Admin only)
-7. Customize system prompts per channel using `!set_system_prompt` (Admin only)
-8. Use `!getcontext` to view the current context window size
-9. Manage conversation context with `!setcontext`, `!resetcontext`, and `!clearcontext` (Admin only)
-10. Use `!hook` to send responses through Discord webhooks
+6. To activate the bot in a channel, use `/activate` or `!activate` (Admin only)
+7. Customize system prompts per channel using `/set_system_prompt` or `!set_system_prompt` (Admin only)
+8. Use `/getcontext` or `!getcontext` to view the current context window size
+9. Manage conversation context with `/setcontext`, `/resetcontext`, and `/clearcontext` (Admin only)
+10. Use `/hook` or `!hook` to send responses through Discord webhooks
 
 **Available Commands:**
-• `!help` - Show this help message
-• `!listmodels` - Show all available models (simple list)
-• `!list_agents` - Show all available agents with detailed info
-• `!uptime` - Show how long the bot has been running
-• `!set_system_prompt <agent> <prompt>` - Set a custom system prompt for an AI agent (Admin only)
-• `!reset_system_prompt <agent>` - Reset an AI agent's system prompt to default (Admin only)
-• `!setcontext <size>` - Set the number of previous messages to include in context (Admin only)
-• `!getcontext` - View current context window size
-• `!resetcontext` - Reset context window to default size (Admin only)
-• `!clearcontext [hours]` - Clear conversation history, optionally specify hours (Admin only)
-• `!activate` - Make the bot respond to every message in the current channel (Admin only)
-• `!deactivate` - Deactivate the bot's response to every message in the current channel (Admin only)
-• `!hook <message>` - Send a response through configured Discord webhooks
-• `!list_activated` - List all activated channels in the current server (Admin only)
+All commands support both slash (/) and prefix (!) formats:
+• `/help` - Show this help message
+• `/listmodels` - Show all available models (simple list)
+• `/list_agents` - Show all available agents with detailed info
+• `/uptime` - Show how long the bot has been running
+• `/set_system_prompt <agent> <prompt>` - Set a custom system prompt for an AI agent (Admin only)
+• `/reset_system_prompt <agent>` - Reset an AI agent's system prompt to default (Admin only)
+• `/setcontext <size>` - Set the number of previous messages to include in context (Admin only)
+• `/getcontext` - View current context window size
+• `/resetcontext` - Reset context window to default size (Admin only)
+• `/clearcontext [hours]` - Clear conversation history, optionally specify hours (Admin only)
+• `/activate` - Make the bot respond to every message in the current channel (Admin only)
+• `/deactivate` - Deactivate the bot's response to every message in the current channel (Admin only)
+• `/hook <message>` - Send a response through configured Discord webhooks
+• `/list_activated` - List all activated channels in the current server (Admin only)
 
 **System Prompt Variables:**
 When setting custom system prompts, you can use these variables:
@@ -187,9 +179,9 @@ When setting custom system prompts, you can use these variables:
             logging.error(f"[Help] Error sending help message: {str(e)}", exc_info=True)
             await ctx.send("An error occurred while fetching the help message. Please try again later.")
 
-    @commands.command(name="listmodels", aliases=["st_listmodels"])
+    @commands.hybrid_command(name="listmodels", with_app_command=True)
     async def list_models_command(self, ctx):
-        """Send a simple list of all available models"""
+        """Show a simple list of all available models. Use /listmodels or !listmodels"""
         try:
             vision_models, models = self.get_all_models()
             model_list = self.format_simple_model_list(vision_models, models)
@@ -199,9 +191,9 @@ When setting custom system prompts, you can use these variables:
             logging.error(f"[Help] Error sending model list: {str(e)}", exc_info=True)
             await ctx.send("An error occurred while fetching the model list. Please try again later.")
 
-    @commands.command(name="list_agents", aliases=["st_list_agents"])
+    @commands.hybrid_command(name="list_agents", with_app_command=True)
     async def list_agents_command(self, ctx):
-        """Send a detailed list of all available agents and their configurations"""
+        """Show detailed information about all available agents. Use /list_agents or !list_agents"""
         try:
             vision_models, models = self.get_all_models()
             embed = discord.Embed(title="🤖 Available Agents", color=discord.Color.blue())
@@ -220,64 +212,12 @@ When setting custom system prompts, you can use these variables:
             logging.error(f"[Help] Error sending agent list: {str(e)}", exc_info=True)
             await ctx.send("An error occurred while fetching the agent list. Please try again later.")
 
-    @commands.command(name='st_setcontext')
-    @commands.has_permissions(manage_messages=True)
-    async def st_set_context(self, ctx, size: int):
-        """Set the number of previous messages to include in context"""
-        try:
-            # Validate size
-            if size < 1 or size > MAX_CONTEXT_WINDOW:
-                await ctx.reply(f"❌ Context size must be between 1 and {MAX_CONTEXT_WINDOW}")
-                return
-
-            # Update context window for this channel
-            channel_id = str(ctx.channel.id)
-            CONTEXT_WINDOWS[channel_id] = size
-
-            # Update database
-            try:
-                with sqlite3.connect('databases/interaction_logs.db') as conn:
-                    cursor = conn.cursor()
-                    cursor.execute('''INSERT OR REPLACE INTO context_windows (channel_id, window_size, last_modified) VALUES (?, ?, ?)''', (channel_id, size, datetime.now().isoformat()))
-                    conn.commit()
-            except Exception as e:
-                logging.warning(f"Could not update context_windows table: {str(e)}")
-
-            await ctx.reply(f"✅ Context window set to {size} messages for this channel")
-        except Exception as e:
-            logging.error(f"Failed to set context: {str(e)}")
-            await ctx.reply("❌ Failed to set context window")
-
-    @commands.command(name='st_resetcontext')
-    @commands.has_permissions(manage_messages=True)
-    async def st_reset_context(self, ctx):
-        """Reset context window to default size"""
-        try:
-            channel_id = str(ctx.channel.id)
-
-            # Remove channel-specific context setting
-            if channel_id in CONTEXT_WINDOWS:
-                del CONTEXT_WINDOWS[channel_id]
-
-            # Update database
-            try:
-                with sqlite3.connect('databases/interaction_logs.db') as conn:
-                    cursor = conn.cursor()
-                    cursor.execute('''DELETE FROM context_windows WHERE channel_id = ?''', (channel_id,))
-                    conn.commit()
-            except Exception as e:
-                logging.warning(f"Could not update context_windows table: {str(e)}")
-
-            await ctx.reply(f"🔄 Context window reset to default ({DEFAULT_CONTEXT_WINDOW} messages)")
-        except Exception as e:
-            logging.error(f"Failed to reset context: {str(e)}")
-            await ctx.reply("❌ Failed to reset context window")
-
-    @commands.command(name='hook')
+    @commands.hybrid_command(name='hook')
+    @discord.app_commands.describe(content="Message to send through webhooks")
     async def hook_command(self, ctx, *, content: str = None):
-        """Send a message through configured webhooks"""
+        """Send a message through configured webhooks. Use /hook or !hook"""
         if not content:
-            await ctx.reply("❌ Please provide a message after !hook")
+            await ctx.reply("❌ Please provide a message after /hook or !hook")
             return
 
         if DEBUG_LOGGING:
@@ -337,11 +277,11 @@ When setting custom system prompts, you can use these variables:
         else:
             await ctx.reply("❌ No LLM cog responded to the message")
 
-    @commands.command(name="list_activated", aliases=["st_list_activated"])
+    @commands.hybrid_command(name="list_activated")
     @commands.has_permissions(administrator=True)
     @commands.guild_only()
     async def list_activated_channels(self, ctx):
-        """List all activated channels in the current server"""
+        """List all activated channels in the current server. Use /list_activated or !list_activated"""
         try:
             router_cog = self.bot.get_cog('RouterCog')
             if not router_cog:
@@ -361,137 +301,13 @@ When setting custom system prompts, you can use these variables:
             logging.error(f"[Help] Error listing activated channels: {e}")
             await ctx.reply("❌ Failed to list activated channels. Please try again.")
 
-    @commands.command(name="set_system_prompt", aliases=["st_set_system_prompt"])
-    @commands.has_permissions(administrator=True)
-    async def set_system_prompt(self, ctx, agent: str, *, prompt: str):
-        """Set a custom system prompt for an AI agent in this channel"""
+    async def cog_load(self):
+        """Called when the cog is loaded. Sync slash commands."""
         try:
-            # Load existing prompts
-            if os.path.exists(self.dynamic_prompts_file):
-                with open(self.dynamic_prompts_file, "r") as f:
-                    dynamic_prompts = json.load(f)
-            else:
-                dynamic_prompts = {}
-
-            # Get guild and channel IDs
-            guild_id = str(ctx.guild.id) if ctx.guild else None
-            channel_id = str(ctx.channel.id)
-
-            # Initialize guild dict if needed
-            if guild_id and guild_id not in dynamic_prompts:
-                dynamic_prompts[guild_id] = {}
-
-            # Set the prompt
-            if guild_id:
-                if channel_id not in dynamic_prompts[guild_id]:
-                    dynamic_prompts[guild_id][channel_id] = {}
-                dynamic_prompts[guild_id][channel_id][agent] = prompt
-            else:
-                if channel_id not in dynamic_prompts:
-                    dynamic_prompts[channel_id] = {}
-                dynamic_prompts[channel_id][agent] = prompt
-
-            # Save updated prompts
-            with open(self.dynamic_prompts_file, "w") as f:
-                json.dump(dynamic_prompts, f, indent=4)
-
-            await ctx.reply(f"✅ System prompt updated for {agent} in this channel.")
-
+            await self.bot.tree.sync()
+            logging.info("[Help] Slash commands synced successfully")
         except Exception as e:
-            logging.error(f"Error setting system prompt: {str(e)}")
-            await ctx.reply("❌ Failed to set system prompt. Please try again.")
-
-    @commands.command(name="reset_system_prompt", aliases=["st_reset_system_prompt"])
-    @commands.has_permissions(administrator=True)
-    async def reset_system_prompt(self, ctx, agent: str):
-        """Reset the system prompt for an AI agent to its default in this channel"""
-        try:
-            if not os.path.exists(self.dynamic_prompts_file):
-                await ctx.reply("No custom prompts found.")
-                return
-
-            with open(self.dynamic_prompts_file, "r") as f:
-                dynamic_prompts = json.load(f)
-
-            guild_id = str(ctx.guild.id) if ctx.guild else None
-            channel_id = str(ctx.channel.id)
-
-            # Remove prompt if it exists
-            if guild_id and guild_id in dynamic_prompts:
-                if channel_id in dynamic_prompts[guild_id]:
-                    if agent in dynamic_prompts[guild_id][channel_id]:
-                        del dynamic_prompts[guild_id][channel_id][agent]
-                    if not dynamic_prompts[guild_id][channel_id]:
-                        del dynamic_prompts[guild_id][channel_id]
-                if not dynamic_prompts[guild_id]:
-                    del dynamic_prompts[guild_id]
-            elif channel_id in dynamic_prompts:
-                if agent in dynamic_prompts[channel_id]:
-                    del dynamic_prompts[channel_id][agent]
-                if not dynamic_prompts[channel_id]:
-                    del dynamic_prompts[channel_id]
-
-            # Save updated prompts
-            with open(self.dynamic_prompts_file, "w") as f:
-                json.dump(dynamic_prompts, f, indent=4)
-
-            await ctx.reply(f"✅ System prompt reset to default for {agent} in this channel.")
-
-        except Exception as e:
-            logging.error(f"Error resetting system prompt: {str(e)}")
-            await ctx.reply("❌ Failed to reset system prompt. Please try again.")
-
-    @commands.command(name='uptime')
-    async def uptime_command(self, ctx):
-        """Show how long the bot has been running"""
-        uptime = get_uptime()
-        await ctx.reply(f"🕒 Bot has been running for {uptime}")
-
-    async def send_to_webhook(self, webhook_url: str, content: str, retries: int = 0) -> bool:
-        """
-        Send content to a Discord webhook
-        Returns True if successful, False otherwise
-        """
-        if retries >= MAX_RETRIES:
-            logging.error(f"[Help] Max retries reached for webhook")
-            return False
-
-        try:
-            async with self.session.post(
-                webhook_url,
-                json={"content": content},
-                timeout=WEBHOOK_TIMEOUT
-            ) as response:
-                if response.status == 429:  # Rate limited
-                    retry_after = float(response.headers.get('Retry-After', 5))
-                    await asyncio.sleep(retry_after)
-                    return await self.send_to_webhook(webhook_url, content, retries + 1)
-                
-                return 200 <= response.status < 300
-
-        except asyncio.TimeoutError:
-            logging.warning(f"[Help] Webhook request timed out, retrying...")
-            return await self.send_to_webhook(webhook_url, content, retries + 1)
-        except Exception as e:
-            logging.error(f"[Help] Error sending to webhook: {str(e)}")
-            return False
-
-    async def broadcast_to_webhooks(self, content: str) -> bool:
-        """
-        Broadcast content to all configured webhooks
-        Returns True if at least one webhook succeeded
-        """
-        if not self.webhooks:
-            if DEBUG_LOGGING:
-                logging.warning("[Help] No webhooks configured")
-            return False
-
-        success = False
-        for webhook_url in self.webhooks:
-            result = await self.send_to_webhook(webhook_url, content)
-            success = success or result
-
-        return success
+            logging.error(f"[Help] Failed to sync slash commands: {e}")
 
 async def setup(bot):
     try:

@@ -1,4 +1,4 @@
-dimport discord
+import discord
 from discord.ext import commands
 import asyncio
 import logging
@@ -93,20 +93,25 @@ class RouterCog(commands.Cog):
             ''', (str(user_id), enabled))
             await db.commit()
 
-    @commands.command(name='store')
+    @commands.hybrid_command(name='store', with_app_command=True)
+    @discord.app_commands.describe(option="Turn message storage on or off")
+    @discord.app_commands.choices(option=[
+        discord.app_commands.Choice(name="on", value="on"),
+        discord.app_commands.Choice(name="off", value="off")
+    ])
     async def store_command(self, ctx, option: str = None):
-        """Toggle message storage for the user. Usage: !store [on|off]"""
+        """Toggle message storage for the user. Use /store or !store [on|off]"""
         try:
             if option is None:
                 # Display current setting
                 is_enabled = await self.get_store_setting(ctx.author.id)
                 status = "enabled" if is_enabled else "disabled"
-                await ctx.send(f"Your store setting is currently {status}. Use '!store on' or '!store off' to change it.")
+                await ctx.send(f"Your store setting is currently {status}. Use '/store on' or '/store off' to change it.")
                 return
 
             option = option.lower()
             if option not in ['on', 'off']:
-                await ctx.send("Invalid option. Use '!store on' or '!store off'.")
+                await ctx.send("Invalid option. Use '/store on' or '/store off'.")
                 return
 
             enabled = option == 'on'
@@ -117,9 +122,10 @@ class RouterCog(commands.Cog):
             logging.error(f"[Router] Error in store command: {str(e)}")
             await ctx.send("❌ Error updating store setting. Please try again later.")
 
-    @commands.command(name='activate')
+    @commands.hybrid_command(name='activate', with_app_command=True)
+    @commands.has_permissions(administrator=True)
     async def activate_command(self, ctx):
-        """Activate the bot in the current channel."""
+        """Activate the bot in the current channel. Use /activate or !activate"""
         try:
             channel_id = str(ctx.channel.id)
             
@@ -163,9 +169,10 @@ class RouterCog(commands.Cog):
             logging.error(f"[Router] Error in activate command: {str(e)}")
             await ctx.send("❌ Error activating bot. Please try again later.")
 
-    @commands.command(name='deactivate')
+    @commands.hybrid_command(name='deactivate', with_app_command=True)
+    @commands.has_permissions(administrator=True)
     async def deactivate_command(self, ctx):
-        """Deactivate the bot in the current channel."""
+        """Deactivate the bot in the current channel. Use /deactivate or !deactivate"""
         try:
             channel_id = str(ctx.channel.id)
 
@@ -207,9 +214,9 @@ class RouterCog(commands.Cog):
             logging.error(f"[Router] Error in deactivate command: {str(e)}")
             await ctx.send("❌ Error deactivating bot. Please try again later.")
 
-    @commands.command(name='uptime')
+    @commands.hybrid_command(name='uptime', with_app_command=True)
     async def uptime_command(self, ctx):
-        """Show how long the bot has been running."""
+        """Show how long the bot has been running. Use /uptime or !uptime"""
         try:
             current_time = datetime.now(timezone.utc)
             delta = current_time - self.start_time
@@ -302,6 +309,14 @@ class RouterCog(commands.Cog):
 
         # Process the message routing
         await self.route_message(message)
+
+    async def cog_load(self):
+        """Called when the cog is loaded. Sync slash commands."""
+        try:
+            await self.bot.tree.sync()
+            logging.info("[Router] Slash commands synced successfully")
+        except Exception as e:
+            logging.error(f"[Router] Failed to sync slash commands: {e}")
 
 async def setup(bot):
     await bot.add_cog(RouterCog(bot))

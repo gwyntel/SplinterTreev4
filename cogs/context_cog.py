@@ -42,6 +42,47 @@ class ContextCog(commands.Cog):
         except Exception as e:
             logging.error(f"Failed to set up database: {str(e)}")
 
+    @commands.hybrid_command(name='getcontext', with_app_command=True)
+    async def get_context_command(self, ctx):
+        """View current context window size. Use /getcontext or !getcontext"""
+        try:
+            channel_id = str(ctx.channel.id)
+            size = CONTEXT_WINDOWS.get(channel_id, DEFAULT_CONTEXT_WINDOW)
+            await ctx.send(f"Current context window size: {size} messages")
+        except Exception as e:
+            logging.error(f"[Context] Error getting context size: {str(e)}")
+            await ctx.send("❌ Error getting context window size")
+
+    @commands.hybrid_command(name='clearcontext', with_app_command=True)
+    @commands.has_permissions(manage_messages=True)
+    @discord.app_commands.describe(hours="Number of hours of history to clear (optional)")
+    async def clear_context_command(self, ctx, hours: int = None):
+        """Clear conversation history. Use /clearcontext [hours] or !clearcontext [hours]"""
+        try:
+            channel_id = str(ctx.channel.id)
+            
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                if hours:
+                    # Clear messages older than specified hours
+                    cutoff_time = (datetime.now() - timedelta(hours=hours)).isoformat()
+                    cursor.execute('''
+                        DELETE FROM messages 
+                        WHERE channel_id = ? AND timestamp < ?
+                    ''', (channel_id, cutoff_time))
+                    await ctx.send(f"✅ Cleared messages older than {hours} hours from context")
+                else:
+                    # Clear all messages
+                    cursor.execute('DELETE FROM messages WHERE channel_id = ?', (channel_id,))
+                    await ctx.send("✅ Cleared all messages from context")
+                
+                conn.commit()
+                
+        except Exception as e:
+            logging.error(f"[Context] Error clearing context: {str(e)}")
+            await ctx.send("❌ Error clearing context")
+
     async def get_context_messages(self, channel_id: str, limit: int = None, exclude_message_id: str = None) -> List[Dict]:
         """Get previous messages from the context database for all users and cogs in the channel"""
         try:
@@ -260,7 +301,7 @@ class ContextCog(commands.Cog):
         """Listen for messages and add them to context"""
         try:
             # Skip command messages
-            if message.content.startswith('!'):
+            if message.content.startswith('!') or message.content.startswith('/'):
                 return
 
             # Add message to context with username prefix
@@ -277,6 +318,14 @@ class ContextCog(commands.Cog):
             )
         except Exception as e:
             logging.error(f"Error in on_message: {e}")
+
+    async def cog_load(self):
+        """Called when the cog is loaded. Sync slash commands."""
+        try:
+            await self.bot.tree.sync()
+            logging.info("[Context] Slash commands synced successfully")
+        except Exception as e:
+            logging.error(f"[Context] Failed to sync slash commands: {e}")
 
 async def setup(bot):
     await bot.add_cog(ContextCog(bot))
