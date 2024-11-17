@@ -228,13 +228,16 @@ class API:
         """Handle streaming response"""
         try:
             async for chunk in stream:
-                if chunk.choices and chunk.choices[0].delta.get('content'):
-                    yield chunk.choices[0].delta['content']
-                elif chunk.choices and chunk.choices[0].delta.get('tool_calls'):
+                if chunk.choices and hasattr(chunk.choices[0].delta, 'content') and chunk.choices[0].delta.content is not None:
+                    yield chunk.choices[0].delta.content
+                elif chunk.choices and hasattr(chunk.choices[0].delta, 'tool_calls') and chunk.choices[0].delta.tool_calls:
                     # Handle tool call chunks if present
-                    tool_call = chunk.choices[0].delta['tool_calls'][0]
-                    if 'function' in tool_call:
-                        yield json.dumps(tool_call['function'])
+                    tool_call = chunk.choices[0].delta.tool_calls[0]
+                    if hasattr(tool_call, 'function'):
+                        yield json.dumps({
+                            'name': tool_call.function.name if hasattr(tool_call.function, 'name') else None,
+                            'arguments': tool_call.function.arguments if hasattr(tool_call.function, 'arguments') else None
+                        })
 
             received_at = int(time.time() * 1000)
             
@@ -297,7 +300,8 @@ class API:
             if stream:
                 stream = await self.openai_client.chat.completions.create(**payload)
                 requested_at = int(time.time() * 1000)
-                return self._stream_response(stream, requested_at, payload, provider, user_id, guild_id, prompt_file, model_cog)
+                async for chunk in self._stream_response(stream, requested_at, payload, provider, user_id, guild_id, prompt_file, model_cog):
+                    yield chunk
             else:
                 requested_at = int(time.time() * 1000)
                 response = await self.openai_client.chat.completions.create(**payload)
@@ -313,8 +317,18 @@ class API:
                 }
 
                 # Add tool calls if present
-                if hasattr(response.choices[0].message, 'tool_calls'):
-                    result['choices'][0]['message']['tool_calls'] = response.choices[0].message.tool_calls
+                if hasattr(response.choices[0].message, 'tool_calls') and response.choices[0].message.tool_calls:
+                    result['choices'][0]['message']['tool_calls'] = [
+                        {
+                            'id': tool_call.id,
+                            'type': tool_call.type,
+                            'function': {
+                                'name': tool_call.function.name,
+                                'arguments': tool_call.function.arguments
+                            }
+                        }
+                        for tool_call in response.choices[0].message.tool_calls
+                    ]
                 
                 # Log completion
                 await self.report(
