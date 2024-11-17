@@ -4,15 +4,13 @@ import asyncio
 import logging
 import aiosqlite
 import json
-from config import OPENROUTER_API_KEY
-import aiohttp
 from datetime import datetime, timezone
+from shared.api import api
 
 class RouterCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.db_path = 'databases/user_settings.db'
-        self.session = None  # Will be initialized in cog_load
         self.start_time = datetime.now(timezone.utc)
         self.activated_channels = self._load_activated_channels()
 
@@ -38,18 +36,6 @@ class RouterCog(commands.Cog):
                 json.dump(channels, f)
         except Exception as e:
             logging.error(f"[Help] Error saving activated channels: {e}")
-
-    async def cog_load(self):
-        """Called when the cog is loaded."""
-        self.session = aiohttp.ClientSession()
-        await self._setup_database()
-        logging.info("RouterCog has been loaded and initialized.")
-
-    async def cog_unload(self):
-        """Called when the cog is unloaded."""
-        if self.session:
-            await self.session.close()
-            logging.info("Closed aiohttp session in RouterCog.")
 
     async def _setup_database(self):
         """Initialize the SQLite database for user settings."""
@@ -194,14 +180,6 @@ class RouterCog(commands.Cog):
             logging.error(f"[Router] Error in uptime command: {str(e)}")
             await ctx.send("❌ Error getting uptime. Please try again later.")
 
-    async def is_store_enabled(self, user_id: int) -> bool:
-        """Check if the store setting is enabled for a user."""
-        try:
-            return await self.get_store_setting(user_id)
-        except Exception as e:
-            logging.error(f"[Router] Error checking store setting: {str(e)}")
-            return False
-
     async def route_message(self, message: discord.Message):
         """Route the message to the appropriate model."""
         try:
@@ -212,27 +190,17 @@ class RouterCog(commands.Cog):
             if not guild_id or guild_id not in self.activated_channels or channel_id not in self.activated_channels[guild_id]:
                 return  # Channel not activated
 
-            response = await self.session.post(
-                'https://openrouter.ai/api/v1/chat/completions',
-                headers={
-                    'Authorization': f'Bearer {OPENROUTER_API_KEY}',
-                    'HTTP-Referer': 'https://github.com/gwyntel/SplinterTreev4',
-                    'X-Title': 'SplinterTree by GwynTel'
-                },
-                json={
-                    'model': 'mistralai/mixtral-8x7b-instruct',
-                    'messages': [
-                        {'role': 'user', 'content': message.content}
-                    ]
-                }
+            # Use the API singleton to make the request
+            response = await api.call_openpipe(
+                messages=[{'role': 'user', 'content': message.content}],
+                model='mistralai/mixtral-8x7b-instruct',
+                user_id=str(message.author.id),
+                guild_id=guild_id
             )
             
-            # Get response data
-            data = await response.json()
-            
             # Extract content from response
-            if data and 'choices' in data and len(data['choices']) > 0:
-                content = data['choices'][0]['message']['content']
+            if response and 'choices' in response and len(response['choices']) > 0:
+                content = response['choices'][0]['message']['content']
                 await message.channel.send(content)
             else:
                 await message.channel.send("❌ Failed to process message. Please try again later.")

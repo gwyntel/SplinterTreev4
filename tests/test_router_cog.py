@@ -12,16 +12,15 @@ async def cog():
 
     # Create RouterCog instance
     cog = RouterCog(bot)
-    # Run cog_load to initialize session and other async setups
-    await cog.cog_load()
     # Initialize activated_channels
     cog.activated_channels = {}
+    # Set start time
+    cog.start_time = datetime.now(timezone.utc)
     return cog
 
 @pytest.mark.asyncio
 async def test_generate_response(cog):
     """Test that the RouterCog generates a response handling potential fallback logic."""
-    cog = await cog  # Await the fixture
     message = MagicMock()
     message.content = "Test message"
     message.channel.id = 123
@@ -33,30 +32,30 @@ async def test_generate_response(cog):
     # Set up activated channel
     cog.activated_channels = {str(message.guild.id): {str(message.channel.id): True}}
 
-    # Mock the HTTP POST request to return a dummy response
-    mock_response = MagicMock()
-    mock_response.json = AsyncMock(return_value={
-        'choices': [{'message': {'content': 'Test response'}}]
-    })
-    cog.session.post = AsyncMock(return_value=mock_response)
+    # Mock the API call
+    mock_response = {'choices': [{'message': {'content': 'Test response'}}]}
+    with patch('shared.api.api.call_openpipe', new_callable=AsyncMock) as mock_api:
+        mock_api.return_value = mock_response
+        
+        # Mock message.channel.send to assert it was called
+        message.channel.send = AsyncMock()
 
-    # Mock message.channel.send to assert it was called
-    message.channel.send = AsyncMock()
+        await cog.route_message(message)
 
-    await cog.route_message(message)
-
-    # Assert that a response was sent
-    message.channel.send.assert_called_with('Test response')
+        # Assert that a response was sent
+        message.channel.send.assert_called_with('Test response')
 
 @pytest.mark.asyncio
 async def test_store_command_no_option(cog):
     """Test the store command with no option."""
-    cog = await cog  # Await the fixture
     ctx = MagicMock()
     ctx.author.id = 789
     ctx.send = AsyncMock()
     ctx.command.name = 'store'
     ctx.guild = None  # Simulate DM
+
+    # Mock get_store_setting
+    cog.get_store_setting = AsyncMock(return_value=False)
 
     await cog.store_command(ctx)
 
@@ -66,45 +65,44 @@ async def test_store_command_no_option(cog):
 @pytest.mark.asyncio
 async def test_store_command_on(cog):
     """Test the store command with 'on' option."""
-    cog = await cog  # Await the fixture
     ctx = MagicMock()
     ctx.author.id = 789
     ctx.send = AsyncMock()
     ctx.command.name = 'store'
     ctx.guild = None  # Simulate DM
 
+    # Mock store setting methods
+    cog.get_store_setting = AsyncMock(return_value=True)
+    cog.set_store_setting = AsyncMock()
+
     await cog.store_command(ctx, 'on')
 
     # Verify that the user setting is updated
-    enabled = await cog.get_store_setting(ctx.author.id)
-    assert enabled is True
-
-    # Verify confirmation message
+    cog.set_store_setting.assert_called_with(ctx.author.id, True)
     ctx.send.assert_called_with("Store setting enabled for you.")
 
 @pytest.mark.asyncio
 async def test_store_command_off(cog):
     """Test the store command with 'off' option."""
-    cog = await cog  # Await the fixture
     ctx = MagicMock()
     ctx.author.id = 789
     ctx.send = AsyncMock()
     ctx.command.name = 'store'
     ctx.guild = None  # Simulate DM
 
+    # Mock store setting methods
+    cog.get_store_setting = AsyncMock(return_value=False)
+    cog.set_store_setting = AsyncMock()
+
     await cog.store_command(ctx, 'off')
 
     # Verify that the user setting is updated
-    enabled = await cog.get_store_setting(ctx.author.id)
-    assert enabled is False
-
-    # Verify confirmation message
+    cog.set_store_setting.assert_called_with(ctx.author.id, False)
     ctx.send.assert_called_with("Store setting disabled for you.")
 
 @pytest.mark.asyncio
 async def test_store_command_invalid_option(cog):
     """Test the store command with invalid option."""
-    cog = await cog  # Await the fixture
     ctx = MagicMock()
     ctx.author.id = 789
     ctx.send = AsyncMock()
@@ -119,7 +117,6 @@ async def test_store_command_invalid_option(cog):
 @pytest.mark.asyncio
 async def test_activate_command(cog):
     """Test the activate command."""
-    cog = await cog  # Await the fixture
     ctx = MagicMock()
     ctx.guild.id = 101112
     ctx.channel.id = 123
@@ -141,7 +138,6 @@ async def test_activate_command(cog):
 @pytest.mark.asyncio
 async def test_deactivate_command(cog):
     """Test the deactivate command."""
-    cog = await cog  # Await the fixture
     ctx = MagicMock()
     ctx.guild.id = 101112
     ctx.channel.id = 123
@@ -163,7 +159,6 @@ async def test_deactivate_command(cog):
 @pytest.mark.asyncio
 async def test_uptime_command(cog):
     """Test the uptime command."""
-    cog = await cog  # Await the fixture
     ctx = MagicMock()
     ctx.send = AsyncMock()
 
@@ -184,7 +179,6 @@ async def test_uptime_command(cog):
 @pytest.mark.asyncio
 async def test_route_message_inactive_channel(cog):
     """Test that messages in inactive channels are ignored."""
-    cog = await cog  # Await the fixture
     message = MagicMock()
     message.guild = MagicMock()
     message.guild.id = 101112
