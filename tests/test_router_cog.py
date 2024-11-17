@@ -4,35 +4,6 @@ from datetime import datetime, timezone, timedelta
 from discord import app_commands, Interaction, Object
 from cogs.router_cog import RouterCog
 
-@pytest.fixture
-async def cog():
-    bot = MagicMock()
-    context_cog = MagicMock()
-    context_cog.get_context_messages = AsyncMock(return_value=[])
-    bot.get_cog.return_value = context_cog
-    bot.tree = MagicMock()
-    bot.tree.sync = AsyncMock()
-
-    # Create RouterCog instance
-    cog = RouterCog(bot)
-    # Initialize activated_channels
-    cog.activated_channels = {}
-    # Set start time
-    cog.start_time = datetime.now(timezone.utc)
-    # Initialize database
-    await cog._setup_database()
-    return cog
-
-@pytest.fixture
-def interaction():
-    interaction = MagicMock(spec=Interaction)
-    interaction.response = AsyncMock()
-    interaction.guild_id = 101112
-    interaction.channel_id = 123
-    interaction.user.id = 789
-    interaction.command = MagicMock()
-    return interaction
-
 @pytest.mark.asyncio
 async def test_generate_response():
     """Test that the RouterCog generates a response handling potential fallback logic."""
@@ -82,29 +53,44 @@ async def test_generate_response():
         target_cog.handle_message.assert_called_once_with(message)
 
 @pytest.mark.asyncio
-async def test_store_command_prefix(cog):
+async def test_store_command_prefix():
     """Test the store command with prefix (!store)."""
+    bot = MagicMock()
+    bot.tree = MagicMock()
+    bot.tree.sync = AsyncMock()
+    cog = RouterCog(bot)
+    
     ctx = MagicMock()
     ctx.author.id = 789
     ctx.send = AsyncMock()
     ctx.command.name = 'store'
     ctx.guild = None  # Simulate DM
 
-    # Mock get_store_setting
+    # Mock methods
     cog.get_store_setting = AsyncMock(return_value=False)
 
-    await cog.store_command(ctx)
+    await cog.store_command.callback(cog, ctx)
 
     # Verify that current setting is displayed
     ctx.send.assert_called_with("Your store setting is currently disabled. Use '/store on' or '/store off' to change it.")
 
 @pytest.mark.asyncio
-async def test_store_command_slash(cog, interaction):
+async def test_store_command_slash():
     """Test the store command with slash command (/store)."""
-    # Mock get_store_setting
+    bot = MagicMock()
+    bot.tree = MagicMock()
+    bot.tree.sync = AsyncMock()
+    cog = RouterCog(bot)
+    
+    interaction = MagicMock(spec=Interaction)
+    interaction.response = AsyncMock()
+    interaction.response.is_done = MagicMock(return_value=False)
+    interaction.user.id = 789
+
+    # Mock methods
     cog.get_store_setting = AsyncMock(return_value=False)
 
-    await cog.store_command(interaction)
+    await cog.store_command.callback(cog, interaction)
 
     # Verify that current setting is displayed
     interaction.response.send_message.assert_called_with(
@@ -112,50 +98,71 @@ async def test_store_command_slash(cog, interaction):
     )
 
 @pytest.mark.asyncio
-async def test_store_command_on_prefix(cog):
+async def test_store_command_on_prefix():
     """Test the store command with 'on' option using prefix."""
+    bot = MagicMock()
+    bot.tree = MagicMock()
+    bot.tree.sync = AsyncMock()
+    cog = RouterCog(bot)
+    
     ctx = MagicMock()
     ctx.author.id = 789
     ctx.send = AsyncMock()
     ctx.command.name = 'store'
     ctx.guild = None  # Simulate DM
 
-    # Mock store setting methods
+    # Mock methods
     cog.get_store_setting = AsyncMock(return_value=True)
     cog.set_store_setting = AsyncMock()
 
-    await cog.store_command(ctx, 'on')
+    await cog.store_command.callback(cog, ctx, 'on')
 
     # Verify that the user setting is updated
     cog.set_store_setting.assert_called_with(ctx.author.id, True)
     ctx.send.assert_called_with("Store setting enabled for you.")
 
 @pytest.mark.asyncio
-async def test_store_command_on_slash(cog, interaction):
+async def test_store_command_on_slash():
     """Test the store command with 'on' option using slash command."""
-    # Mock store setting methods
+    bot = MagicMock()
+    bot.tree = MagicMock()
+    bot.tree.sync = AsyncMock()
+    cog = RouterCog(bot)
+    
+    interaction = MagicMock(spec=Interaction)
+    interaction.response = AsyncMock()
+    interaction.response.is_done = MagicMock(return_value=False)
+    interaction.user.id = 789
+
+    # Mock methods
     cog.get_store_setting = AsyncMock(return_value=True)
     cog.set_store_setting = AsyncMock()
 
-    await cog.store_command(interaction, 'on')
+    await cog.store_command.callback(cog, interaction, 'on')
 
     # Verify that the user setting is updated
     cog.set_store_setting.assert_called_with(interaction.user.id, True)
     interaction.response.send_message.assert_called_with("Store setting enabled for you.")
 
 @pytest.mark.asyncio
-async def test_activate_command_prefix(cog):
+async def test_activate_command_prefix():
     """Test the activate command with prefix."""
+    bot = MagicMock()
+    bot.tree = MagicMock()
+    bot.tree.sync = AsyncMock()
+    cog = RouterCog(bot)
+    cog.activated_channels = {}
+    
     ctx = MagicMock()
     ctx.guild.id = 101112
     ctx.channel.id = 123
     ctx.send = AsyncMock()
     ctx.author.guild_permissions.administrator = True
 
-    # Mock _save_activated_channels
+    # Mock methods
     cog._save_activated_channels = MagicMock()
 
-    await cog.activate_command(ctx)
+    await cog.activate_command.callback(cog, ctx)
 
     # Verify channel is activated
     assert str(ctx.guild.id) in cog.activated_channels
@@ -165,14 +172,29 @@ async def test_activate_command_prefix(cog):
     ctx.send.assert_called_with("✅ Bot activated in this channel.")
 
 @pytest.mark.asyncio
-async def test_activate_command_slash(cog, interaction):
+async def test_activate_command_slash():
     """Test the activate command with slash command."""
+    bot = MagicMock()
+    bot.tree = MagicMock()
+    bot.tree.sync = AsyncMock()
+    cog = RouterCog(bot)
+    cog.activated_channels = {}
+    
+    interaction = MagicMock(spec=Interaction)
+    interaction.response = AsyncMock()
+    interaction.response.is_done = MagicMock(return_value=False)
+    interaction.guild_id = 101112
+    interaction.channel_id = 123
     interaction.user.guild_permissions.administrator = True
+    interaction.guild = MagicMock()
+    interaction.guild.id = interaction.guild_id
+    interaction.channel = MagicMock()
+    interaction.channel.id = interaction.channel_id
 
-    # Mock _save_activated_channels
+    # Mock methods
     cog._save_activated_channels = MagicMock()
 
-    await cog.activate_command(interaction)
+    await cog.activate_command.callback(cog, interaction)
 
     # Verify channel is activated
     assert str(interaction.guild_id) in cog.activated_channels
@@ -182,8 +204,13 @@ async def test_activate_command_slash(cog, interaction):
     interaction.response.send_message.assert_called_with("✅ Bot activated in this channel.")
 
 @pytest.mark.asyncio
-async def test_deactivate_command_prefix(cog):
+async def test_deactivate_command_prefix():
     """Test the deactivate command with prefix."""
+    bot = MagicMock()
+    bot.tree = MagicMock()
+    bot.tree.sync = AsyncMock()
+    cog = RouterCog(bot)
+    
     ctx = MagicMock()
     ctx.guild.id = 101112
     ctx.channel.id = 123
@@ -194,7 +221,7 @@ async def test_deactivate_command_prefix(cog):
     cog.activated_channels = {str(ctx.guild.id): {str(ctx.channel.id): True}}
     cog._save_activated_channels = MagicMock()
 
-    await cog.deactivate_command(ctx)
+    await cog.deactivate_command.callback(cog, ctx)
 
     # Verify channel is deactivated
     assert str(ctx.channel.id) not in cog.activated_channels.get(str(ctx.guild.id), {})
@@ -203,15 +230,29 @@ async def test_deactivate_command_prefix(cog):
     ctx.send.assert_called_with("✅ Bot deactivated in this channel.")
 
 @pytest.mark.asyncio
-async def test_deactivate_command_slash(cog, interaction):
+async def test_deactivate_command_slash():
     """Test the deactivate command with slash command."""
+    bot = MagicMock()
+    bot.tree = MagicMock()
+    bot.tree.sync = AsyncMock()
+    cog = RouterCog(bot)
+    
+    interaction = MagicMock(spec=Interaction)
+    interaction.response = AsyncMock()
+    interaction.response.is_done = MagicMock(return_value=False)
+    interaction.guild_id = 101112
+    interaction.channel_id = 123
     interaction.user.guild_permissions.administrator = True
+    interaction.guild = MagicMock()
+    interaction.guild.id = interaction.guild_id
+    interaction.channel = MagicMock()
+    interaction.channel.id = interaction.channel_id
 
     # Set up pre-activated channel
     cog.activated_channels = {str(interaction.guild_id): {str(interaction.channel_id): True}}
     cog._save_activated_channels = MagicMock()
 
-    await cog.deactivate_command(interaction)
+    await cog.deactivate_command.callback(cog, interaction)
 
     # Verify channel is deactivated
     assert str(interaction.channel_id) not in cog.activated_channels.get(str(interaction.guild_id), {})
@@ -220,15 +261,20 @@ async def test_deactivate_command_slash(cog, interaction):
     interaction.response.send_message.assert_called_with("✅ Bot deactivated in this channel.")
 
 @pytest.mark.asyncio
-async def test_uptime_command_prefix(cog):
+async def test_uptime_command_prefix():
     """Test the uptime command with prefix."""
+    bot = MagicMock()
+    bot.tree = MagicMock()
+    bot.tree.sync = AsyncMock()
+    cog = RouterCog(bot)
+    
     ctx = MagicMock()
     ctx.send = AsyncMock()
 
     # Set a fixed start time for testing
     cog.start_time = datetime.now(timezone.utc) - timedelta(days=1, hours=2, minutes=30, seconds=15)
 
-    await cog.uptime_command(ctx)
+    await cog.uptime_command.callback(cog, ctx)
 
     # Verify uptime message format
     ctx.send.assert_called_once()
@@ -240,12 +286,21 @@ async def test_uptime_command_prefix(cog):
     assert "15 seconds" in call_args
 
 @pytest.mark.asyncio
-async def test_uptime_command_slash(cog, interaction):
+async def test_uptime_command_slash():
     """Test the uptime command with slash command."""
+    bot = MagicMock()
+    bot.tree = MagicMock()
+    bot.tree.sync = AsyncMock()
+    cog = RouterCog(bot)
+    
+    interaction = MagicMock(spec=Interaction)
+    interaction.response = AsyncMock()
+    interaction.response.is_done = MagicMock(return_value=False)
+
     # Set a fixed start time for testing
     cog.start_time = datetime.now(timezone.utc) - timedelta(days=1, hours=2, minutes=30, seconds=15)
 
-    await cog.uptime_command(interaction)
+    await cog.uptime_command.callback(cog, interaction)
 
     # Verify uptime message format
     interaction.response.send_message.assert_called_once()
@@ -259,7 +314,11 @@ async def test_uptime_command_slash(cog, interaction):
 @pytest.mark.asyncio
 async def test_route_message_inactive_channel():
     """Test that messages in inactive channels are ignored."""
-    cog = RouterCog(MagicMock())
+    bot = MagicMock()
+    bot.tree = MagicMock()
+    bot.tree.sync = AsyncMock()
+    cog = RouterCog(bot)
+    
     message = MagicMock()
     message.guild = MagicMock()
     message.guild.id = 101112
@@ -275,7 +334,12 @@ async def test_route_message_inactive_channel():
     message.channel.send.assert_not_called()
 
 @pytest.mark.asyncio
-async def test_cog_load(cog):
+async def test_cog_load():
     """Test that slash commands are synced when the cog is loaded."""
+    bot = MagicMock()
+    bot.tree = MagicMock()
+    bot.tree.sync = AsyncMock()
+    cog = RouterCog(bot)
+    
     await cog.cog_load()
     cog.bot.tree.sync.assert_called_once()

@@ -93,6 +93,16 @@ class RouterCog(commands.Cog):
             ''', (str(user_id), enabled))
             await db.commit()
 
+    async def send_response(self, ctx, content: str):
+        """Helper method to handle sending responses for both prefix and slash commands."""
+        if isinstance(ctx, discord.Interaction):
+            if not ctx.response.is_done():
+                await ctx.response.send_message(content)
+            else:
+                await ctx.followup.send(content)
+        else:
+            await ctx.send(content)
+
     @commands.hybrid_command(name='store', with_app_command=True)
     @discord.app_commands.describe(option="Turn message storage on or off")
     @discord.app_commands.choices(option=[
@@ -102,25 +112,26 @@ class RouterCog(commands.Cog):
     async def store_command(self, ctx, option: str = None):
         """Toggle message storage for the user. Use /store or !store [on|off]"""
         try:
+            user_id = ctx.author.id if hasattr(ctx, 'author') else ctx.user.id
             if option is None:
                 # Display current setting
-                is_enabled = await self.get_store_setting(ctx.author.id)
+                is_enabled = await self.get_store_setting(user_id)
                 status = "enabled" if is_enabled else "disabled"
-                await ctx.send(f"Your store setting is currently {status}. Use '/store on' or '/store off' to change it.")
+                await self.send_response(ctx, f"Your store setting is currently {status}. Use '/store on' or '/store off' to change it.")
                 return
 
             option = option.lower()
             if option not in ['on', 'off']:
-                await ctx.send("Invalid option. Use '/store on' or '/store off'.")
+                await self.send_response(ctx, "Invalid option. Use '/store on' or '/store off'.")
                 return
 
             enabled = option == 'on'
-            await self.set_store_setting(ctx.author.id, enabled)
-            await ctx.send(f"Store setting {'enabled' if enabled else 'disabled'} for you.")
+            await self.set_store_setting(user_id, enabled)
+            await self.send_response(ctx, f"Store setting {'enabled' if enabled else 'disabled'} for you.")
 
         except Exception as e:
             logging.error(f"[Router] Error in store command: {str(e)}")
-            await ctx.send("❌ Error updating store setting. Please try again later.")
+            await self.send_response(ctx, "❌ Error updating store setting. Please try again later.")
 
     @commands.hybrid_command(name='activate', with_app_command=True)
     @commands.has_permissions(administrator=True)
@@ -135,14 +146,15 @@ class RouterCog(commands.Cog):
                     self.activated_channels['DM'] = {}
                 
                 if channel_id in self.activated_channels['DM']:
-                    await ctx.send("Bot is already activated in this DM.")
+                    await self.send_response(ctx, "Bot is already activated in this DM.")
                     return
 
                 self.activated_channels['DM'][channel_id] = True
             else:
                 # Handle guild channel activation
-                if not ctx.author.guild_permissions.administrator:
-                    await ctx.send("❌ You need administrator permissions to use this command in a server.")
+                user = ctx.author if hasattr(ctx, 'author') else ctx.user
+                if not user.guild_permissions.administrator:
+                    await self.send_response(ctx, "❌ You need administrator permissions to use this command in a server.")
                     return
 
                 guild_id = str(ctx.guild.id)
@@ -150,7 +162,7 @@ class RouterCog(commands.Cog):
                     self.activated_channels[guild_id] = {}
 
                 if channel_id in self.activated_channels[guild_id]:
-                    await ctx.send("Bot is already activated in this channel.")
+                    await self.send_response(ctx, "Bot is already activated in this channel.")
                     return
 
                 self.activated_channels[guild_id][channel_id] = True
@@ -162,12 +174,12 @@ class RouterCog(commands.Cog):
             if help_cog:
                 help_cog.activated_channels = self.activated_channels
 
-            await ctx.send("✅ Bot activated in this channel.")
+            await self.send_response(ctx, "✅ Bot activated in this channel.")
             logging.info(f"[Router] Activated channel {channel_id}")
 
         except Exception as e:
             logging.error(f"[Router] Error in activate command: {str(e)}")
-            await ctx.send("❌ Error activating bot. Please try again later.")
+            await self.send_response(ctx, "❌ Error activating bot. Please try again later.")
 
     @commands.hybrid_command(name='deactivate', with_app_command=True)
     @commands.has_permissions(administrator=True)
@@ -179,7 +191,7 @@ class RouterCog(commands.Cog):
             if isinstance(ctx.channel, discord.DMChannel):
                 # Handle DM deactivation
                 if 'DM' not in self.activated_channels or channel_id not in self.activated_channels['DM']:
-                    await ctx.send("Bot is not activated in this DM.")
+                    await self.send_response(ctx, "Bot is not activated in this DM.")
                     return
 
                 del self.activated_channels['DM'][channel_id]
@@ -187,13 +199,14 @@ class RouterCog(commands.Cog):
                     del self.activated_channels['DM']
             else:
                 # Handle guild channel deactivation
-                if not ctx.author.guild_permissions.administrator:
-                    await ctx.send("❌ You need administrator permissions to use this command in a server.")
+                user = ctx.author if hasattr(ctx, 'author') else ctx.user
+                if not user.guild_permissions.administrator:
+                    await self.send_response(ctx, "❌ You need administrator permissions to use this command in a server.")
                     return
 
                 guild_id = str(ctx.guild.id)
                 if guild_id not in self.activated_channels or channel_id not in self.activated_channels[guild_id]:
-                    await ctx.send("Bot is not activated in this channel.")
+                    await self.send_response(ctx, "Bot is not activated in this channel.")
                     return
 
                 del self.activated_channels[guild_id][channel_id]
@@ -207,12 +220,12 @@ class RouterCog(commands.Cog):
             if help_cog:
                 help_cog.activated_channels = self.activated_channels
 
-            await ctx.send("✅ Bot deactivated in this channel.")
+            await self.send_response(ctx, "✅ Bot deactivated in this channel.")
             logging.info(f"[Router] Deactivated channel {channel_id}")
 
         except Exception as e:
             logging.error(f"[Router] Error in deactivate command: {str(e)}")
-            await ctx.send("❌ Error deactivating bot. Please try again later.")
+            await self.send_response(ctx, "❌ Error deactivating bot. Please try again later.")
 
     @commands.hybrid_command(name='uptime', with_app_command=True)
     async def uptime_command(self, ctx):
@@ -239,11 +252,11 @@ class RouterCog(commands.Cog):
                 uptime_parts.append(f"{seconds} second{'s' if seconds != 1 else ''}")
 
             uptime_str = ", ".join(uptime_parts)
-            await ctx.send(f"Bot has been running for {uptime_str}.")
+            await self.send_response(ctx, f"Bot has been running for {uptime_str}.")
 
         except Exception as e:
             logging.error(f"[Router] Error in uptime command: {str(e)}")
-            await ctx.send("❌ Error getting uptime. Please try again later.")
+            await self.send_response(ctx, "❌ Error getting uptime. Please try again later.")
 
     async def route_message(self, message: discord.Message):
         """Route the message to the appropriate cog based on the model's decision."""
