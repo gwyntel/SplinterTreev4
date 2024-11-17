@@ -12,6 +12,7 @@ from contextlib import asynccontextmanager
 from urllib.parse import urlparse, urljoin
 from config import OPENROUTER_API_KEY, HELICONE_API_KEY
 from openai import AsyncOpenAI
+from concurrent.futures import ThreadPoolExecutor  # Import ThreadPoolExecutor
 
 # Create required directories before configuring logging
 os.makedirs('logs', exist_ok=True)
@@ -339,9 +340,9 @@ class API:
                     },
                     resp_payload=result,
                     status_code=200,
-                    tags=tags,
                     user_id=user_id,
-                    guild_id=guild_id
+                    guild_id=guild_id,
+                    tags=tags
                 )
                 
                 return result

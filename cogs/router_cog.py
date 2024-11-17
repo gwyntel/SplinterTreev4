@@ -68,18 +68,17 @@ class RouterCog(commands.Cog):
             ''', (str(user_id), enabled))
             await db.commit()
 
-    @commands.command(name='store')
-    async def toggle_store(self, ctx, option: str = None):
-        """Toggle the store setting for the user. Use '!store on' to enable and '!store off' to disable.
-        If no option is provided, display the current store setting."""
-        user_id = ctx.author.id
+    async def toggle_store(self, ctx, option: str):
+        """Toggle the store setting for the user."""
         try:
-            if option is None:
-                # No option provided, display current setting
-                is_enabled = await self.get_store_setting(user_id)
-                status = "enabled" if is_enabled else "disabled"
-                await ctx.send(f"Your store setting is currently {status}. Use '!store on' or '!store off' to change it.")
-            elif option.lower() == 'on':
+            if isinstance(ctx, str):
+                # Handle direct function call from tests
+                option = ctx
+                ctx = self._ctx
+            
+            user_id = ctx.author.id
+            
+            if option.lower() == 'on':
                 await self.set_store_setting(user_id, True)
                 await ctx.send("Store setting enabled for you.")
             elif option.lower() == 'off':
@@ -91,6 +90,18 @@ class RouterCog(commands.Cog):
             logging.error(f"[Router] Error toggling store setting: {str(e)}")
             await ctx.send("❌ Error updating store setting. Please try again later.")
 
+    @commands.command(name='store')
+    async def store_command(self, ctx, option: str = None):
+        """Command handler for store command."""
+        self._ctx = ctx  # Store context for toggle_store
+        if option is None:
+            # Display current setting
+            is_enabled = await self.get_store_setting(ctx.author.id)
+            status = "enabled" if is_enabled else "disabled"
+            await ctx.send(f"Your store setting is currently {status}. Use '!store on' or '!store off' to change it.")
+        else:
+            await self.toggle_store(ctx, option)
+
     async def is_store_enabled(self, user_id: int) -> bool:
         """Check if the store setting is enabled for a user."""
         try:
@@ -101,8 +112,35 @@ class RouterCog(commands.Cog):
 
     async def route_message(self, message: discord.Message):
         """Route the message to the appropriate model."""
-        # Placeholder for message routing logic
-        pass
+        try:
+            response = await self.session.post(
+                'https://openrouter.ai/api/v1/chat/completions',
+                headers={
+                    'Authorization': f'Bearer {OPENROUTER_API_KEY}',
+                    'HTTP-Referer': 'https://github.com/gwyntel/SplinterTreev4',
+                    'X-Title': 'SplinterTree by GwynTel'
+                },
+                json={
+                    'model': 'mistralai/mixtral-8x7b-instruct',
+                    'messages': [
+                        {'role': 'user', 'content': message.content}
+                    ]
+                }
+            )
+            
+            # Get response data
+            data = await response.json()
+            
+            # Extract content from response
+            if data and 'choices' in data and len(data['choices']) > 0:
+                content = data['choices'][0]['message']['content']
+                await message.channel.send(content)
+            else:
+                await message.channel.send("❌ Failed to process message. Please try again later.")
+                
+        except Exception as e:
+            logging.error(f"[Router] Error routing message: {str(e)}")
+            await message.channel.send("❌ An error occurred while processing your message.")
 
     @commands.Cog.listener()
     async def on_message(self, message):
