@@ -13,7 +13,7 @@ def cog(mock_bot):
 def test_cog_initialization(cog):
     assert cog.name == "Gemma"
     assert cog.nickname == "Gemma"
-    assert cog.model == "google/gemma-2-9b-it"
+    assert cog.model == "google/gemma-2-27b-it"
     assert cog.provider == "openrouter"
     assert cog.supports_vision == False
 

@@ -292,7 +292,7 @@ class RouterCog(commands.Cog):
             # Call the routing model
             response = await api.call_openpipe(
                 messages=messages,
-                model='meta-llama/llama-3.2-3b-instruct',
+                model='mistralai/ministral-3b',
                 user_id=str(message.author.id),
                 guild_id=str(message.guild.id) if message.guild else None
             )

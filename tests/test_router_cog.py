@@ -2,6 +2,24 @@ import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
 from datetime import datetime, timezone, timedelta
 from discord import app_commands, Interaction, Object
+import sys
+from importlib import import_module
+
+# Create mock API module
+mock_api = MagicMock()
+mock_api.call_openpipe = AsyncMock()
+
+# Create mock API class
+mock_api_class = MagicMock()
+mock_api_class.return_value = mock_api
+
+# Mock the entire shared.api module
+mock_api_module = MagicMock()
+mock_api_module.API = mock_api_class
+mock_api_module.api = mock_api
+sys.modules['shared.api'] = mock_api_module
+
+# Now import RouterCog after mocking
 from cogs.router_cog import RouterCog
 
 @pytest.mark.asyncio
@@ -32,25 +50,24 @@ async def test_generate_response():
 
     # Mock the API call to return a cog name
     mock_response = {'choices': [{'message': {'content': 'Mixtral'}}]}
-    with patch('shared.api.api.call_openpipe', new_callable=AsyncMock) as mock_api:
-        mock_api.return_value = mock_response
-        
-        # Mock message.channel.send to assert it was called
-        message.channel.send = AsyncMock()
+    mock_api.call_openpipe.return_value = mock_response
+    
+    # Mock message.channel.send to assert it was called
+    message.channel.send = AsyncMock()
 
-        # Execute the route_message method
-        await cog.route_message(message)
+    # Execute the route_message method
+    await cog.handle_message(message)
 
-        # Verify the API was called with correct parameters
-        mock_api.assert_called_once()
-        args = mock_api.call_args[1]
-        assert args['model'] == 'meta-llama/llama-3.2-3b-instruct'
-        assert args['user_id'] == str(message.author.id)
-        assert args['guild_id'] == str(message.guild.id)
+    # Verify the API was called with correct parameters
+    mock_api.call_openpipe.assert_called_once()
+    args = mock_api.call_openpipe.call_args[1]
+    assert args['model'] == 'mistralai/ministral-3b'
+    assert args['user_id'] == str(message.author.id)
+    assert args['guild_id'] == str(message.guild.id)
 
-        # Verify the message was routed to the correct cog
-        bot.get_cog.assert_called_once_with('MixtralCog')
-        target_cog.handle_message.assert_called_once_with(message)
+    # Verify the message was routed to the correct cog
+    bot.get_cog.assert_called_once_with('MixtralCog')
+    target_cog.handle_message.assert_called_once_with(message)
 
 @pytest.mark.asyncio
 async def test_store_command_prefix():
@@ -328,7 +345,7 @@ async def test_route_message_inactive_channel():
     # Ensure channel is not activated
     cog.activated_channels = {}
 
-    await cog.route_message(message)
+    await cog.handle_message(message)
 
     # Verify no response was sent
     message.channel.send.assert_not_called()
