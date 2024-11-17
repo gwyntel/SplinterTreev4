@@ -297,8 +297,8 @@ class RouterCog(commands.Cog):
                 guild_id=str(message.guild.id) if message.guild else None
             )
 
-            # Log the model's response for debugging
-            logging.info(f"[Router] Model response: {response}")
+            # Log the full model response for debugging
+            logging.info(f"[Router] Full model response: {response}")
 
             # Extract the routing decision
             if response and 'choices' in response and len(response['choices']) > 0:
