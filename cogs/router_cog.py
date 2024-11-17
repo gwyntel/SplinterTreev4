@@ -304,10 +304,12 @@ class RouterCog(commands.Cog):
             if response and 'choices' in response and len(response['choices']) > 0:
                 routing_response = response['choices'][0]['message']['content']
                 # Clean up the response to get the cog name
-                cog_name = routing_response.strip()
-
-                # Log the cog name for debugging
-                logging.info(f"[Router] Routing to cog: {cog_name}Cog")
+                cog_name = routing_response.strip().split('\n')[0].strip()
+                
+                # Remove any extra text or punctuation
+                cog_name = ''.join(c for c in cog_name if c.isalnum())
+                
+                logging.info(f"[Router] Cleaned cog name: {cog_name}")
 
                 # Attempt to get the cog
                 cog = self.bot.get_cog(cog_name + "Cog")

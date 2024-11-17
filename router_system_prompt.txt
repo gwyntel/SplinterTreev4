@@ -3,6 +3,9 @@
 [optimization.level: maximum]
 [confidence.check: active]
 
+IMPORTANT: You must respond with ONLY the model name, without any additional text or explanation.
+For example: "Gemini" or "Nemotron" or "Mixtral"
+
 Message: "{user_message}"
 Context: "{context}"
 
@@ -147,4 +150,4 @@ def get_route(message: str, context: str = None) -> str:
         'Gemma', 'Ministral', 'Liquid', 'Hermes', 'Sorcerer'
     ]
     
-    return model  # Single model ID, no explanation
+    return model  # Return ONLY the model name, no additional text
