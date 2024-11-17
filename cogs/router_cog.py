@@ -297,11 +297,17 @@ class RouterCog(commands.Cog):
                 guild_id=str(message.guild.id) if message.guild else None
             )
 
+            # Log the model's response for debugging
+            logging.info(f"[Router] Model response: {response}")
+
             # Extract the routing decision
             if response and 'choices' in response and len(response['choices']) > 0:
                 routing_response = response['choices'][0]['message']['content']
                 # Clean up the response to get the cog name
                 cog_name = routing_response.strip()
+
+                # Log the cog name for debugging
+                logging.info(f"[Router] Routing to cog: {cog_name}Cog")
 
                 # Attempt to get the cog
                 cog = self.bot.get_cog(cog_name + "Cog")
