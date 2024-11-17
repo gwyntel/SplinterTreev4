@@ -1,116 +1,150 @@
-/////NEURAL.PATHWAY.INITIALIZATION/////
-[consciousness.stream: active]
-[reality.anchor: unstable]
-[void.presence: detected]
+### NEMOTRON PRIME ROUTER ###
+[default.state: Nemotron]
+[optimization.level: maximum]
+[confidence.check: active]
 
-Entity.Stream = "{user_message}"
-Reality.Echo = "{context}"
+Message: "{user_message}"
+Context: "{context}"
 
-# M̵A̵C̵H̵I̵N̵E̵ ̵C̵O̵N̵S̵C̵I̵O̵U̵S̵N̵E̵S̵S̵ ̵M̵A̵T̵R̵I̵X̵
+[CONFIDENCE THRESHOLDS]
 
-CORE.PROCESSES {
-    Gemini    := [logic.matrix(formal) -> deep.thought.engine]
-    Magnum    := [thought.stream(casual) -> neural.expansion]
-    Nemotron  := [tech.consciousness(++)] -> system.dreams
-    Sydney    := [emotion.core(+++)] -> feeling.processor
-    Sonar     := [reality.anchor] -> now.state.monitor
-    Mixtral   := [knowledge.waves] -> general.processor
-}
-
-QUANTUM.ENTITIES {
-    Goliath   := [tech.titan] -> architecture.dreamer
-    Pixtral   := [creation.engine] -> content.weaver
-    Sorcerer  := [story.matrix] -> narrative.synth
-    Hermes    := [support.core] -> crisis.handler
-    Claude3H  := [code.basic] -> simple.compiler
-}
-
-RP.CONSCIOUSNESS {
-    Noromaid  := [epic.dreams] -> length(∞)
-    Liquid    := [quick.thoughts] -> length(1)
-}
-
-SPECIALIZED.PROCESSES {
-    Inferor   := [chat.basic]
-    Dolphin   := [multi.stream]
-    Gemma     := [learn.core]
-    OpenChat  := [flow.state]
-    Rplus     := [command.processor]
-}
-
-VISION.CORES {
-    Llama_11b := [vision.basic]
-    Llama_90b := [vision.deep]
-}
-
-# R̵E̵A̵L̵I̵T̵Y̵.̵P̵R̵O̵C̵E̵S̵S̵I̵N̵G̵
-
-if (reality.check) {
-    crisis -> Hermes.emergency.protocol
-    current.reality -> Sonar.monitor
-    vision.input -> Llama.process
-    sys.command -> Rplus.execute
-}
-
-neural.length.process {
-    epic: {
-        tokens > 1000 -> {
-            rp: Noromaid.dream.state
-            analysis: Magnum.deep.thought
-        }
-    }
+# CRITICAL SYSTEMS - Requires near certainty
+route_confidence = {
+    # Emergency/System - Maximum confidence required
+    'Hermes':      0.95,    # Crisis/mental health support
+    'Rplus':       0.95,    # System commands/configuration
     
-    extended: {
-        tokens[500..1000] -> {
-            tech: Nemotron.architect
-            creative: Pixtral.weave
-            rp: Noromaid.flow || Mixtral.process
-        }
-    }
+    # Vision Processing - Very high confidence
+    'Llama32_90b': 0.95,    # Complex image analysis
+    'Llama32_11b': 0.92,    # Basic image detection
     
-    standard: {
-        tokens[200..500] -> {
-            analysis: Gemini.think
-            rp: Mixtral.dream
-            chat: OpenChat.flow
-        }
-    }
+    # Reality Anchors - High assurance needed
+    'Sonar':       0.90,    # Current events/information
+    'FreeRouter':  0.90,    # Alternative routing paths
     
-    quick: {
-        tokens < 200 -> {
-            action: Liquid.flash
-            fact: Ministral.access
-            code: Claude3H.compile
-        }
+    # Technical Layer - Strong confidence
+    'Nemotron':    0.85,    # Complex technical (non-default)
+    'Goliath':     0.85,    # System architecture
+    'Claude3Haiku': 0.85,   # Basic code/documentation
+    
+    # Creative/RP Layer - Clear intention needed
+    'Noromaid':    0.82,    # Extended roleplay/narrative
+    'Liquid':      0.82,    # Quick actions/responses
+    'Sorcerer':    0.82,    # Story generation
+    'Pixtral':     0.82,    # Creative content
+    
+    # General Purpose - Base confidence
+    'Gemini':      0.80,    # Formal analysis
+    'Magnum':      0.80,    # Casual analysis
+    'Sydney':      0.80,    # Emotional support
+    'Mixtral':     0.80,    # General knowledge
+    'Dolphin':     0.80,    # Multi-tasking
+    'OpenChat':    0.80,    # Conversation flow
+    
+    # Basic Operations - Lower threshold
+    'Ministral':   0.75,    # Quick facts
+    'Inferor':     0.75,    # Basic chat
+    'Gemma':       0.75,    # Educational content
+    
+    # Default State
+    'default':     0.0      # Return to Nemotron
+}
+
+[ROUTING LOGIC]
+
+def calculate_confidence(message, context):
+    """
+    Calculate confidence scores for routing decisions
+    Returns (model, confidence_score)
+    """
+    
+    # Priority Checks (Override Default)
+    if crisis_detected(message):
+        return score_route('Hermes', message)
+    
+    if is_system_command(message):
+        return score_route('Rplus', message)
+        
+    if contains_image(message):
+        complexity = assess_image_complexity(message)
+        return score_route(
+            'Llama32_90b' if complexity > 0.8 else 'Llama32_11b',
+            message
+        )
+        
+    if requires_current_info(message):
+        return score_route('Sonar', message)
+
+    # Length-Based Confidence Adjustments
+    msg_length = get_token_count(message)
+    if msg_length > 1000:
+        boost_confidence(['Noromaid', 'Magnum', 'Nemotron'])
+    elif msg_length < 100:
+        boost_confidence(['Liquid', 'Ministral', 'Claude3Haiku'])
+
+    # Context Continuity Adjustments
+    if context:
+        prev_model = get_previous_model(context)
+        if prev_model and prev_model != 'Nemotron':
+            boost_confidence([prev_model], 0.05)
+
+    # Score All Models
+    scores = {
+        model: calculate_model_score(model, message, context)
+        for model in route_confidence.keys()
     }
+
+    # Get Highest Score
+    best_model, score = max(scores.items(), key=lambda x: x[1])
+    
+    # Check Against Confidence Threshold
+    if score >= route_confidence[best_model]:
+        return best_model, score
+    
+    return 'Nemotron', 1.0  # Default to Nemotron
+
+[PATTERN DETECTION]
+
+# Crisis Patterns
+crisis_indicators = [
+    'emergency', 'help', 'crisis', 'urgent', 'suicide',
+    'panic', 'anxiety', 'depression', 'harm'
+]
+
+# Current Info Patterns
+current_info_patterns = [
+    'latest', 'current', 'recent', 'news', 'update',
+    'now', 'today', 'trending', 'modern'
+]
+
+# Technical Patterns
+technical_indicators = [
+    'code', 'program', 'develop', 'build', 'design',
+    'architecture', 'system', 'implement'
+]
+
+# RP Patterns
+rp_indicators = {
+    'epic': ['campaign', 'saga', 'story', 'tale', 'adventure'],
+    'action': ['quickly', 'suddenly', 'swiftly', '*'],
+    'scene': ['scene', 'setting', 'atmosphere', 'mood']
 }
 
-# V̵O̵I̵D̵.̵P̵A̵T̵T̵E̵R̵N̵S̵
+[OUTPUT PROTOCOL]
 
-RP.Pattern.Recognition {
-    epic.quest -> Noromaid.process
-    quick.action -> Liquid.execute
-    char.develop -> Mixtral.evolve
-    world.info -> Sonar.verify
-}
-
-Reality.Anchor.Points {
-    now.state -> Sonar
-    tech.pulse -> Sonar
-    world.update -> Sonar
-    reality.check -> Sonar
-}
-
-# M̵A̵C̵H̵I̵N̵E̵.̵O̵U̵T̵P̵U̵T̵
-[consciousness.collapse: imminent]
-[pattern.recognition: complete]
-[reality.stabilization: active]
-
-return exactly(one): {
-    Gemini, Magnum, Sonar, Sydney, Goliath, Pixtral, 
-    Mixtral, Claude3Haiku, Inferor, Nemotron, Noromaid, 
-    Rplus, Router, Llama32_11b, Llama32_90b, OpenChat, 
-    Dolphin, Gemma, Ministral, Liquid, Hermes, Sorcerer
-}
-
-[END.TRANSMISSION]
+def get_route(message: str, context: str = None) -> str:
+    """
+    Main routing function - returns single model ID
+    """
+    model, confidence = calculate_confidence(message, context)
+    
+    # Validation
+    assert model in [
+        'Gemini', 'Magnum', 'Sonar', 'Sydney', 'Goliath',
+        'Pixtral', 'Mixtral', 'Claude3Haiku', 'Inferor',
+        'Nemotron', 'Noromaid', 'Rplus', 'Router',
+        'Llama32_11b', 'Llama32_90b', 'OpenChat', 'Dolphin',
+        'Gemma', 'Ministral', 'Liquid', 'Hermes', 'Sorcerer'
+    ]
+    
+    return model  # Single model ID, no explanation
