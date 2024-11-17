@@ -63,7 +63,7 @@ async def test_store_command_no_option():
     # Mock get_store_setting
     cog.get_store_setting = AsyncMock(return_value=False)
 
-    await cog.store_command(ctx)
+    await cog.store_command.callback(cog, ctx)
 
     # Verify that current setting is displayed
     ctx.send.assert_called_with("Your store setting is currently disabled. Use '!store on' or '!store off' to change it.")
@@ -82,7 +82,7 @@ async def test_store_command_on():
     cog.get_store_setting = AsyncMock(return_value=True)
     cog.set_store_setting = AsyncMock()
 
-    await cog.store_command(ctx, 'on')
+    await cog.store_command.callback(cog, ctx, 'on')
 
     # Verify that the user setting is updated
     cog.set_store_setting.assert_called_with(ctx.author.id, True)
@@ -102,7 +102,7 @@ async def test_store_command_off():
     cog.get_store_setting = AsyncMock(return_value=False)
     cog.set_store_setting = AsyncMock()
 
-    await cog.store_command(ctx, 'off')
+    await cog.store_command.callback(cog, ctx, 'off')
 
     # Verify that the user setting is updated
     cog.set_store_setting.assert_called_with(ctx.author.id, False)
@@ -118,7 +118,7 @@ async def test_store_command_invalid_option():
     ctx.command.name = 'store'
     ctx.guild = None  # Simulate DM
 
-    await cog.store_command(ctx, 'invalid')
+    await cog.store_command.callback(cog, ctx, 'invalid')
 
     # Verify error message
     ctx.send.assert_called_with("Invalid option. Use '!store on' or '!store off'.")
@@ -137,7 +137,7 @@ async def test_activate_command():
     # Mock _save_activated_channels
     cog._save_activated_channels = MagicMock()
 
-    await cog.activate_command(ctx)
+    await cog.activate_command.callback(cog, ctx)
 
     # Verify channel is activated
     assert str(ctx.guild.id) in cog.activated_channels
@@ -160,7 +160,7 @@ async def test_deactivate_command():
     cog.activated_channels = {str(ctx.guild.id): {str(ctx.channel.id): True}}
     cog._save_activated_channels = MagicMock()
 
-    await cog.deactivate_command(ctx)
+    await cog.deactivate_command.callback(cog, ctx)
 
     # Verify channel is deactivated
     assert str(ctx.channel.id) not in cog.activated_channels.get(str(ctx.guild.id), {})
@@ -178,7 +178,7 @@ async def test_uptime_command():
     # Set a fixed start time for testing
     cog.start_time = datetime.now(timezone.utc) - timedelta(days=1, hours=2, minutes=30, seconds=15)
 
-    await cog.uptime_command(ctx)
+    await cog.uptime_command.callback(cog, ctx)
 
     # Verify uptime message format
     ctx.send.assert_called_once()
