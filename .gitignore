@@ -12,6 +12,7 @@ __pycache__/
 interaction_logs.jsonl
 history_per_channel.json
 databases/interaction_logs.db
+databases/user_settings.db
 
 # History folder
 history/
