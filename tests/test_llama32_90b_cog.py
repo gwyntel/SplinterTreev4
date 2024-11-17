@@ -1,9 +1,17 @@
 import pytest
 from cogs.llama32_90b_cog import Llama3290bVisionCog
+from unittest.mock import AsyncMock, MagicMock
 
 @pytest.fixture
-def cog(bot):
-    return Llama3290bVisionCog(bot)
+def mock_bot():
+    bot = MagicMock()
+    context_cog = MagicMock()
+    bot.get_cog.return_value = context_cog
+    return bot
+
+@pytest.fixture
+def cog(mock_bot):
+    return Llama3290bVisionCog(mock_bot)
 
 def test_cog_initialization(cog):
     assert cog.name == "Llama-3.2-90B-Vision"
