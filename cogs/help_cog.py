@@ -145,7 +145,7 @@ class HelpCog(commands.Cog, name="Help"):
 3. Use `!listmodels` to see a simple list of available models
 4. Use `!list_agents` to get detailed information about each agent
 5. For private responses, you can DM the bot directly
-6. To activate the router in a channel, use `!router_activate` (Admin only)
+6. To activate the bot in a channel, use `!activate` (Admin only)
 7. Customize system prompts per channel using `!set_system_prompt` (Admin only)
 8. Use `!getcontext` to view the current context window size
 9. Manage conversation context with `!setcontext`, `!resetcontext`, and `!clearcontext` (Admin only)
@@ -164,8 +164,6 @@ class HelpCog(commands.Cog, name="Help"):
 • `!clearcontext [hours]` - Clear conversation history, optionally specify hours (Admin only)
 • `!activate` - Make the bot respond to every message in the current channel (Admin only)
 • `!deactivate` - Deactivate the bot's response to every message in the current channel (Admin only)
-• `!router_activate` - Activate the router to respond to all messages in the current channel (Admin only)
-• `!router_deactivate` - Deactivate the router in the current channel (Admin only)
 • `!hook <message>` - Send a response through configured Discord webhooks
 • `!list_activated` - List all activated channels in the current server (Admin only)
 
@@ -240,11 +238,7 @@ When setting custom system prompts, you can use these variables:
             try:
                 with sqlite3.connect('databases/interaction_logs.db') as conn:
                     cursor = conn.cursor()
-                    cursor.execute('''
-                    INSERT OR REPLACE INTO context_windows 
-                    (channel_id, window_size, last_modified) 
-                    VALUES (?, ?, ?)
-                    ''', (channel_id, size, datetime.now().isoformat()))
+                    cursor.execute('''INSERT OR REPLACE INTO context_windows (channel_id, window_size, last_modified) VALUES (?, ?, ?)''', (channel_id, size, datetime.now().isoformat()))
                     conn.commit()
             except Exception as e:
                 logging.warning(f"Could not update context_windows table: {str(e)}")
@@ -269,9 +263,7 @@ When setting custom system prompts, you can use these variables:
             try:
                 with sqlite3.connect('databases/interaction_logs.db') as conn:
                     cursor = conn.cursor()
-                    cursor.execute('''
-                    DELETE FROM context_windows WHERE channel_id = ?
-                    ''', (channel_id,))
+                    cursor.execute('''DELETE FROM context_windows WHERE channel_id = ?''', (channel_id,))
                     conn.commit()
             except Exception as e:
                 logging.warning(f"Could not update context_windows table: {str(e)}")
@@ -345,110 +337,21 @@ When setting custom system prompts, you can use these variables:
         else:
             await ctx.reply("❌ No LLM cog responded to the message")
 
-    @commands.command(name='router_activate')
-    @commands.has_permissions(manage_messages=True)
-    async def router_activate(self, ctx):
-        """Activate the router to respond to all messages in the current channel"""
-        try:
-            router_cog = self.bot.get_cog('RouterCog')
-            if router_cog:
-                channel_id = str(ctx.channel.id)
-                router_cog.activate_channel(channel_id)
-                await ctx.reply("✅ Router activated for this channel")
-            else:
-                await ctx.reply("❌ Router cog not found")
-        except Exception as e:
-            logging.error(f"[Help] Error activating router: {str(e)}")
-            await ctx.reply("❌ Failed to activate router")
-
-    @commands.command(name='router_deactivate')
-    @commands.has_permissions(manage_messages=True)
-    async def router_deactivate(self, ctx):
-        """Deactivate the router in the current channel"""
-        try:
-            router_cog = self.bot.get_cog('RouterCog')
-            if router_cog:
-                channel_id = str(ctx.channel.id)
-                router_cog.deactivate_channel(channel_id)
-                await ctx.reply("✅ Router deactivated for this channel")
-            else:
-                await ctx.reply("❌ Router cog not found")
-        except Exception as e:
-            logging.error(f"[Help] Error deactivating router: {str(e)}")
-            await ctx.reply("❌ Failed to deactivate router")
-
-    @commands.command(name="channel_activate", aliases=["activate", "st_activate"])
-    @commands.has_permissions(manage_messages=True)
-    async def activate_channel(self, ctx):
-        """Activate the bot to respond to every message in the current channel"""
-        try:
-            guild_id = str(ctx.guild.id) if ctx.guild else "dm"
-            channel_id = str(ctx.channel.id)
-
-            logging.info(f"[Help] Activating channel {channel_id} in guild {guild_id}")
-
-            # Initialize guild dict if needed
-            if guild_id not in self.activated_channels:
-                self.activated_channels[guild_id] = {}
-
-            # Add the channel
-            self.activated_channels[guild_id][channel_id] = True
-            self.save_activated_channels()
-
-            # Reload activated channels in RouterCog
-            router_cog = self.bot.get_cog('RouterCog')
-            if router_cog:
-                router_cog.activated_channels = self.activated_channels
-                logging.info(f"[Help] Updated RouterCog activated channels: {router_cog.activated_channels}")
-
-            await ctx.reply("✅ Bot will now respond to every message in this channel.")
-        except Exception as e:
-            logging.error(f"[Help] Error activating channel: {e}")
-            await ctx.reply("❌ Failed to activate channel. Please try again.")
-
-    @commands.command(name="channel_deactivate", aliases=["deactivate", "st_deactivate"])
-    @commands.has_permissions(manage_messages=True)
-    async def channel_deactivate(self, ctx):
-        """Deactivate the bot's response to every message in the current channel"""
-        try:
-            guild_id = str(ctx.guild.id) if ctx.guild else "dm"
-            channel_id = str(ctx.channel.id)
-
-            logging.info(f"[Help] Deactivating channel {channel_id} in guild {guild_id}")
-
-            # Remove the channel if it exists
-            if (guild_id in self.activated_channels and 
-                channel_id in self.activated_channels[guild_id]):
-                del self.activated_channels[guild_id][channel_id]
-                
-                # Clean up empty guild dict
-                if not self.activated_channels[guild_id]:
-                    del self.activated_channels[guild_id]
-                
-                self.save_activated_channels()
-
-                # Reload activated channels in RouterCog
-                router_cog = self.bot.get_cog('RouterCog')
-                if router_cog:
-                    router_cog.activated_channels = self.activated_channels
-                    logging.info(f"[Help] Updated RouterCog activated channels: {router_cog.activated_channels}")
-
-                await ctx.reply("✅ Bot will no longer respond to every message in this channel.")
-            else:
-                await ctx.reply("❌ This channel was not previously activated.")
-        except Exception as e:
-            logging.error(f"[Help] Error deactivating channel: {e}")
-            await ctx.reply("❌ Failed to deactivate channel. Please try again.")
-
     @commands.command(name="list_activated", aliases=["st_list_activated"])
-    @commands.has_permissions(manage_messages=True)
+    @commands.has_permissions(administrator=True)
+    @commands.guild_only()
     async def list_activated_channels(self, ctx):
-        """List all activated channels"""
+        """List all activated channels in the current server"""
         try:
-            guild_id = str(ctx.guild.id) if ctx.guild else "dm"
+            router_cog = self.bot.get_cog('RouterCog')
+            if not router_cog:
+                await ctx.reply("❌ Router cog not found")
+                return
+
+            guild_id = str(ctx.guild.id)
             
-            if guild_id in self.activated_channels and self.activated_channels[guild_id]:
-                activated_channels = list(self.activated_channels[guild_id].keys())
+            if guild_id in router_cog.activated_channels and router_cog.activated_channels[guild_id]:
+                activated_channels = list(router_cog.activated_channels[guild_id].keys())
                 channel_mentions = [f"<#{channel_id}>" for channel_id in activated_channels]
                 
                 await ctx.reply("Activated channels:\n" + "\n".join(channel_mentions))
@@ -459,7 +362,7 @@ When setting custom system prompts, you can use these variables:
             await ctx.reply("❌ Failed to list activated channels. Please try again.")
 
     @commands.command(name="set_system_prompt", aliases=["st_set_system_prompt"])
-    @commands.has_permissions(manage_messages=True)
+    @commands.has_permissions(administrator=True)
     async def set_system_prompt(self, ctx, agent: str, *, prompt: str):
         """Set a custom system prompt for an AI agent in this channel"""
         try:
@@ -499,7 +402,7 @@ When setting custom system prompts, you can use these variables:
             await ctx.reply("❌ Failed to set system prompt. Please try again.")
 
     @commands.command(name="reset_system_prompt", aliases=["st_reset_system_prompt"])
-    @commands.has_permissions(manage_messages=True)
+    @commands.has_permissions(administrator=True)
     async def reset_system_prompt(self, ctx, agent: str):
         """Reset the system prompt for an AI agent to its default in this channel"""
         try:

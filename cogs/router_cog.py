@@ -46,6 +46,7 @@ class RouterCog(commands.Cog):
         try:
             with open('activated_channels.json', 'w') as f:
                 json.dump(channels, f)
+            logging.info(f"[Router] Saved activated channels: {channels}")
         except Exception as e:
             logging.error(f"[Router] Error saving activated channels: {e}")
 
@@ -118,9 +119,14 @@ class RouterCog(commands.Cog):
 
     @commands.command(name='activate')
     @commands.has_permissions(administrator=True)
+    @commands.guild_only()
     async def activate_command(self, ctx):
         """Activate the bot in the current channel. Admin only."""
         try:
+            if not ctx.guild:
+                await ctx.send("❌ This command can only be used in a server.")
+                return
+
             guild_id = str(ctx.guild.id)
             channel_id = str(ctx.channel.id)
 
@@ -133,7 +139,14 @@ class RouterCog(commands.Cog):
 
             self.activated_channels[guild_id][channel_id] = True
             self._save_activated_channels(self.activated_channels)
-            await ctx.send("Bot activated in this channel.")
+
+            # Update HelpCog's activated channels
+            help_cog = self.bot.get_cog('Help')
+            if help_cog:
+                help_cog.activated_channels = self.activated_channels
+
+            await ctx.send("✅ Bot activated in this channel.")
+            logging.info(f"[Router] Activated channel {channel_id} in guild {guild_id}")
 
         except Exception as e:
             logging.error(f"[Router] Error in activate command: {str(e)}")
@@ -141,9 +154,14 @@ class RouterCog(commands.Cog):
 
     @commands.command(name='deactivate')
     @commands.has_permissions(administrator=True)
+    @commands.guild_only()
     async def deactivate_command(self, ctx):
         """Deactivate the bot in the current channel. Admin only."""
         try:
+            if not ctx.guild:
+                await ctx.send("❌ This command can only be used in a server.")
+                return
+
             guild_id = str(ctx.guild.id)
             channel_id = str(ctx.channel.id)
 
@@ -155,7 +173,14 @@ class RouterCog(commands.Cog):
             if not self.activated_channels[guild_id]:
                 del self.activated_channels[guild_id]
             self._save_activated_channels(self.activated_channels)
-            await ctx.send("Bot deactivated in this channel.")
+
+            # Update HelpCog's activated channels
+            help_cog = self.bot.get_cog('Help')
+            if help_cog:
+                help_cog.activated_channels = self.activated_channels
+
+            await ctx.send("✅ Bot deactivated in this channel.")
+            logging.info(f"[Router] Deactivated channel {channel_id} in guild {guild_id}")
 
         except Exception as e:
             logging.error(f"[Router] Error in deactivate command: {str(e)}")
@@ -230,9 +255,9 @@ class RouterCog(commands.Cog):
 
                 # Attempt to get the cog
                 cog = self.bot.get_cog(cog_name + "Cog")
-                if cog and hasattr(cog, 'handle_message'):  # Changed from handle_routed_message to handle_message
+                if cog and hasattr(cog, 'handle_message'):
                     # Forward the message to the cog
-                    await cog.handle_message(message)  # Changed from handle_routed_message to handle_message
+                    await cog.handle_message(message)
                 else:
                     await message.channel.send("❌ Unable to route message to the appropriate module.")
                     logging.error(f"[Router] Cog '{cog_name}Cog' not found or 'handle_message' not implemented.")
