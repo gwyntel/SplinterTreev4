@@ -16,11 +16,16 @@ async def cog():
     cog.activated_channels = {}
     # Set start time
     cog.start_time = datetime.now(timezone.utc)
+    # Initialize database
+    await cog._setup_database()
     return cog
 
 @pytest.mark.asyncio
-async def test_generate_response(cog):
+async def test_generate_response():
     """Test that the RouterCog generates a response handling potential fallback logic."""
+    cog = RouterCog(MagicMock())
+    cog.activated_channels = {}
+    
     message = MagicMock()
     message.content = "Test message"
     message.channel.id = 123
@@ -46,8 +51,9 @@ async def test_generate_response(cog):
         message.channel.send.assert_called_with('Test response')
 
 @pytest.mark.asyncio
-async def test_store_command_no_option(cog):
+async def test_store_command_no_option():
     """Test the store command with no option."""
+    cog = RouterCog(MagicMock())
     ctx = MagicMock()
     ctx.author.id = 789
     ctx.send = AsyncMock()
@@ -63,8 +69,9 @@ async def test_store_command_no_option(cog):
     ctx.send.assert_called_with("Your store setting is currently disabled. Use '!store on' or '!store off' to change it.")
 
 @pytest.mark.asyncio
-async def test_store_command_on(cog):
+async def test_store_command_on():
     """Test the store command with 'on' option."""
+    cog = RouterCog(MagicMock())
     ctx = MagicMock()
     ctx.author.id = 789
     ctx.send = AsyncMock()
@@ -82,8 +89,9 @@ async def test_store_command_on(cog):
     ctx.send.assert_called_with("Store setting enabled for you.")
 
 @pytest.mark.asyncio
-async def test_store_command_off(cog):
+async def test_store_command_off():
     """Test the store command with 'off' option."""
+    cog = RouterCog(MagicMock())
     ctx = MagicMock()
     ctx.author.id = 789
     ctx.send = AsyncMock()
@@ -101,8 +109,9 @@ async def test_store_command_off(cog):
     ctx.send.assert_called_with("Store setting disabled for you.")
 
 @pytest.mark.asyncio
-async def test_store_command_invalid_option(cog):
+async def test_store_command_invalid_option():
     """Test the store command with invalid option."""
+    cog = RouterCog(MagicMock())
     ctx = MagicMock()
     ctx.author.id = 789
     ctx.send = AsyncMock()
@@ -115,8 +124,10 @@ async def test_store_command_invalid_option(cog):
     ctx.send.assert_called_with("Invalid option. Use '!store on' or '!store off'.")
 
 @pytest.mark.asyncio
-async def test_activate_command(cog):
+async def test_activate_command():
     """Test the activate command."""
+    cog = RouterCog(MagicMock())
+    cog.activated_channels = {}
     ctx = MagicMock()
     ctx.guild.id = 101112
     ctx.channel.id = 123
@@ -136,8 +147,9 @@ async def test_activate_command(cog):
     ctx.send.assert_called_with("Bot activated in this channel.")
 
 @pytest.mark.asyncio
-async def test_deactivate_command(cog):
+async def test_deactivate_command():
     """Test the deactivate command."""
+    cog = RouterCog(MagicMock())
     ctx = MagicMock()
     ctx.guild.id = 101112
     ctx.channel.id = 123
@@ -157,8 +169,9 @@ async def test_deactivate_command(cog):
     ctx.send.assert_called_with("Bot deactivated in this channel.")
 
 @pytest.mark.asyncio
-async def test_uptime_command(cog):
+async def test_uptime_command():
     """Test the uptime command."""
+    cog = RouterCog(MagicMock())
     ctx = MagicMock()
     ctx.send = AsyncMock()
 
@@ -177,8 +190,9 @@ async def test_uptime_command(cog):
     assert "15 seconds" in call_args
 
 @pytest.mark.asyncio
-async def test_route_message_inactive_channel(cog):
+async def test_route_message_inactive_channel():
     """Test that messages in inactive channels are ignored."""
+    cog = RouterCog(MagicMock())
     message = MagicMock()
     message.guild = MagicMock()
     message.guild.id = 101112
