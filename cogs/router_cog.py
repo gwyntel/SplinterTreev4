@@ -6,12 +6,38 @@ import aiosqlite
 import json
 from config import OPENROUTER_API_KEY
 import aiohttp
+from datetime import datetime, timezone
 
 class RouterCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.db_path = 'databases/user_settings.db'
         self.session = None  # Will be initialized in cog_load
+        self.start_time = datetime.now(timezone.utc)
+        self.activated_channels = self._load_activated_channels()
+
+    def _load_activated_channels(self) -> dict:
+        """Load activated channels from file"""
+        try:
+            with open('activated_channels.json', 'r') as f:
+                channels = json.load(f)
+            logging.info(f"[Help] Loaded activated channels: {channels}")
+            return channels
+        except FileNotFoundError:
+            logging.info("[Help] No activated channels file found, creating new one")
+            self._save_activated_channels({})
+            return {}
+        except Exception as e:
+            logging.error(f"[Help] Error loading activated channels: {e}")
+            return {}
+
+    def _save_activated_channels(self, channels: dict):
+        """Save activated channels to file"""
+        try:
+            with open('activated_channels.json', 'w') as f:
+                json.dump(channels, f)
+        except Exception as e:
+            logging.error(f"[Help] Error saving activated channels: {e}")
 
     async def cog_load(self):
         """Called when the cog is loaded."""
@@ -68,39 +94,105 @@ class RouterCog(commands.Cog):
             ''', (str(user_id), enabled))
             await db.commit()
 
-    async def toggle_store(self, ctx, option: str):
-        """Toggle the store setting for the user."""
-        try:
-            if isinstance(ctx, str):
-                # Handle direct function call from tests
-                option = ctx
-                ctx = self._ctx
-            
-            user_id = ctx.author.id
-            
-            if option.lower() == 'on':
-                await self.set_store_setting(user_id, True)
-                await ctx.send("Store setting enabled for you.")
-            elif option.lower() == 'off':
-                await self.set_store_setting(user_id, False)
-                await ctx.send("Store setting disabled for you.")
-            else:
-                await ctx.send("Invalid option. Use '!store on' or '!store off'.")
-        except Exception as e:
-            logging.error(f"[Router] Error toggling store setting: {str(e)}")
-            await ctx.send("❌ Error updating store setting. Please try again later.")
-
     @commands.command(name='store')
     async def store_command(self, ctx, option: str = None):
-        """Command handler for store command."""
-        self._ctx = ctx  # Store context for toggle_store
-        if option is None:
-            # Display current setting
-            is_enabled = await self.get_store_setting(ctx.author.id)
-            status = "enabled" if is_enabled else "disabled"
-            await ctx.send(f"Your store setting is currently {status}. Use '!store on' or '!store off' to change it.")
-        else:
-            await self.toggle_store(ctx, option)
+        """Toggle message storage for the user. Usage: !store [on|off]"""
+        try:
+            if option is None:
+                # Display current setting
+                is_enabled = await self.get_store_setting(ctx.author.id)
+                status = "enabled" if is_enabled else "disabled"
+                await ctx.send(f"Your store setting is currently {status}. Use '!store on' or '!store off' to change it.")
+                return
+
+            option = option.lower()
+            if option not in ['on', 'off']:
+                await ctx.send("Invalid option. Use '!store on' or '!store off'.")
+                return
+
+            enabled = option == 'on'
+            await self.set_store_setting(ctx.author.id, enabled)
+            await ctx.send(f"Store setting {'enabled' if enabled else 'disabled'} for you.")
+
+        except Exception as e:
+            logging.error(f"[Router] Error in store command: {str(e)}")
+            await ctx.send("❌ Error updating store setting. Please try again later.")
+
+    @commands.command(name='activate')
+    @commands.has_permissions(administrator=True)
+    async def activate_command(self, ctx):
+        """Activate the bot in the current channel. Admin only."""
+        try:
+            guild_id = str(ctx.guild.id)
+            channel_id = str(ctx.channel.id)
+
+            if guild_id not in self.activated_channels:
+                self.activated_channels[guild_id] = {}
+
+            if channel_id in self.activated_channels[guild_id]:
+                await ctx.send("Bot is already activated in this channel.")
+                return
+
+            self.activated_channels[guild_id][channel_id] = True
+            self._save_activated_channels(self.activated_channels)
+            await ctx.send("Bot activated in this channel.")
+
+        except Exception as e:
+            logging.error(f"[Router] Error in activate command: {str(e)}")
+            await ctx.send("❌ Error activating bot. Please try again later.")
+
+    @commands.command(name='deactivate')
+    @commands.has_permissions(administrator=True)
+    async def deactivate_command(self, ctx):
+        """Deactivate the bot in the current channel. Admin only."""
+        try:
+            guild_id = str(ctx.guild.id)
+            channel_id = str(ctx.channel.id)
+
+            if guild_id not in self.activated_channels or channel_id not in self.activated_channels[guild_id]:
+                await ctx.send("Bot is not activated in this channel.")
+                return
+
+            del self.activated_channels[guild_id][channel_id]
+            if not self.activated_channels[guild_id]:
+                del self.activated_channels[guild_id]
+            self._save_activated_channels(self.activated_channels)
+            await ctx.send("Bot deactivated in this channel.")
+
+        except Exception as e:
+            logging.error(f"[Router] Error in deactivate command: {str(e)}")
+            await ctx.send("❌ Error deactivating bot. Please try again later.")
+
+    @commands.command(name='uptime')
+    async def uptime_command(self, ctx):
+        """Show how long the bot has been running."""
+        try:
+            current_time = datetime.now(timezone.utc)
+            delta = current_time - self.start_time
+            
+            # Calculate time components
+            days = delta.days
+            hours = delta.seconds // 3600
+            minutes = (delta.seconds % 3600) // 60
+            seconds = delta.seconds % 60
+            
+            # Build uptime string
+            uptime_parts = []
+            if days > 0:
+                uptime_parts.append(f"{days} day{'s' if days != 1 else ''}")
+            if hours > 0:
+                uptime_parts.append(f"{hours} hour{'s' if hours != 1 else ''}")
+            if minutes > 0:
+                uptime_parts.append(f"{minutes} minute{'s' if minutes != 1 else ''}")
+            if seconds > 0 or not uptime_parts:
+                uptime_parts.append(f"{seconds} second{'s' if seconds != 1 else ''}")
+            
+            uptime_str = ", ".join(uptime_parts)
+            await ctx.send(f"Bot has been running for {uptime_str}.")
+
+        except Exception as e:
+            logging.error(f"[Router] Error in uptime command: {str(e)}")
+            await ctx.send("❌ Error getting uptime. Please try again later.")
 
     async def is_store_enabled(self, user_id: int) -> bool:
         """Check if the store setting is enabled for a user."""
@@ -113,6 +205,13 @@ class RouterCog(commands.Cog):
     async def route_message(self, message: discord.Message):
         """Route the message to the appropriate model."""
         try:
+            # Check if channel is activated
+            guild_id = str(message.guild.id) if message.guild else None
+            channel_id = str(message.channel.id)
+            
+            if not guild_id or guild_id not in self.activated_channels or channel_id not in self.activated_channels[guild_id]:
+                return  # Channel not activated
+
             response = await self.session.post(
                 'https://openrouter.ai/api/v1/chat/completions',
                 headers={
