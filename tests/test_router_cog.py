@@ -23,7 +23,14 @@ async def cog():
 @pytest.mark.asyncio
 async def test_generate_response():
     """Test that the RouterCog generates a response handling potential fallback logic."""
-    cog = RouterCog(MagicMock())
+    # Create bot mock that will properly handle get_cog
+    bot = MagicMock()
+    target_cog = MagicMock()
+    target_cog.handle_routed_message = AsyncMock()
+    bot.get_cog.return_value = target_cog
+    
+    # Create cog instance with mocked bot
+    cog = RouterCog(bot)
     cog.activated_channels = {}
     
     message = MagicMock()
@@ -37,18 +44,27 @@ async def test_generate_response():
     # Set up activated channel
     cog.activated_channels = {str(message.guild.id): {str(message.channel.id): True}}
 
-    # Mock the API call
-    mock_response = {'choices': [{'message': {'content': 'Test response'}}]}
+    # Mock the API call to return a cog name
+    mock_response = {'choices': [{'message': {'content': 'Mixtral'}}]}
     with patch('shared.api.api.call_openpipe', new_callable=AsyncMock) as mock_api:
         mock_api.return_value = mock_response
         
         # Mock message.channel.send to assert it was called
         message.channel.send = AsyncMock()
 
+        # Execute the route_message method
         await cog.route_message(message)
 
-        # Assert that a response was sent
-        message.channel.send.assert_called_with('Test response')
+        # Verify the API was called with correct parameters
+        mock_api.assert_called_once()
+        args = mock_api.call_args[1]
+        assert args['model'] == 'meta-llama/llama-3.2-3b-instruct'
+        assert args['user_id'] == str(message.author.id)
+        assert args['guild_id'] == str(message.guild.id)
+
+        # Verify the message was routed to the correct cog
+        bot.get_cog.assert_called_once_with('MixtralCog')
+        target_cog.handle_routed_message.assert_called_once_with(message)
 
 @pytest.mark.asyncio
 async def test_store_command_no_option():
