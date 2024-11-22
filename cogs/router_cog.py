@@ -6,6 +6,7 @@ import aiosqlite
 import json
 from datetime import datetime, timezone
 from shared.api import api
+import random
 
 class RouterCog(commands.Cog):
     def __init__(self, bot):
@@ -15,6 +16,8 @@ class RouterCog(commands.Cog):
         self.activated_channels = self._load_activated_channels()
         # Load the system prompt
         self.router_system_prompt = self._load_router_system_prompt()
+        # Create task for command syncing
+        self.sync_task = None
 
     def _load_router_system_prompt(self):
         """Load the router system prompt from a file or return the default."""
@@ -102,6 +105,30 @@ class RouterCog(commands.Cog):
                 await ctx.followup.send(content)
         else:
             await ctx.send(content)
+
+    async def _sync_commands_with_backoff(self):
+        """Sync commands with exponential backoff for rate limits"""
+        max_retries = 10
+        base_delay = 1
+        for attempt in range(max_retries):
+            try:
+                await self.bot.tree.sync()
+                logging.info("[Router] Slash commands synced successfully")
+                return
+            except discord.HTTPException as e:
+                if e.status == 429:  # Rate limit
+                    retry_after = e.retry_after if hasattr(e, 'retry_after') else base_delay * (2 ** attempt)
+                    # Add some jitter to prevent thundering herd
+                    jitter = random.uniform(0, 0.1 * retry_after)
+                    total_delay = retry_after + jitter
+                    logging.warning(f"[Router] Rate limited, retrying in {total_delay:.2f} seconds (attempt {attempt + 1}/{max_retries})")
+                    await asyncio.sleep(total_delay)
+                else:
+                    logging.error(f"[Router] Failed to sync commands: {e}")
+                    return
+            except Exception as e:
+                logging.error(f"[Router] Unexpected error syncing commands: {e}")
+                return
 
     @commands.hybrid_command(name='store', with_app_command=True)
     @discord.app_commands.describe(option="Turn message storage on or off")
@@ -297,50 +324,62 @@ class RouterCog(commands.Cog):
                 {"role": "user", "content": message.content}
             ]
 
-            # Call the routing model
-            response = await api.call_openpipe(
-                messages=messages,
-                model='mistralai/ministral-3b',
-                user_id=str(message.author.id),
-                guild_id=str(message.guild.id) if message.guild else None
-            )
+            try:
+                # Call the routing model
+                response = await api.call_openpipe(
+                    messages=messages,
+                    model='mistralai/ministral-3b',
+                    user_id=str(message.author.id),
+                    guild_id=str(message.guild.id) if message.guild else None
+                )
 
-            # Log the full model response for debugging
-            logging.info(f"[Router] Full model response: {response}")
+                # Log the full model response for debugging
+                logging.info(f"[Router] Full model response: {response}")
 
-            # Extract the routing decision
-            if response and 'choices' in response and len(response['choices']) > 0:
-                routing_response = response['choices'][0]['message']['content']
-                # Clean up the response to get the cog name
-                cog_name = routing_response.strip().split('\n')[0].strip()
-                
-                # Remove any extra text or punctuation
-                cog_name = ''.join(c for c in cog_name if c.isalnum())
-                
-                logging.info(f"[Router] Cleaned cog name: {cog_name}")
+                # Extract the routing decision
+                if response and 'choices' in response and len(response['choices']) > 0:
+                    routing_response = response['choices'][0]['message']['content']
+                    # Clean up the response to get the cog name
+                    cog_name = routing_response.strip().split('\n')[0].strip()
+                    
+                    # Remove any extra text or punctuation
+                    cog_name = ''.join(c for c in cog_name if c.isalnum())
+                    
+                    logging.info(f"[Router] Cleaned cog name: {cog_name}")
 
-                # Attempt to get the cog
-                cog = self.bot.get_cog(cog_name + "Cog")
-                if cog and hasattr(cog, 'handle_message'):
-                    # Forward the message to the cog
-                    await cog.handle_message(message)
+                    # Attempt to get the cog
+                    cog = self.bot.get_cog(cog_name + "Cog")
+                    if cog and hasattr(cog, 'handle_message'):
+                        # Forward the message to the cog
+                        await cog.handle_message(message)
+                    else:
+                        await message.channel.send("❌ Unable to route message to the appropriate module.")
+                        logging.error(f"[Router] Cog '{cog_name}Cog' not found or 'handle_message' not implemented.")
                 else:
-                    await message.channel.send("❌ Unable to route message to the appropriate module.")
-                    logging.error(f"[Router] Cog '{cog_name}Cog' not found or 'handle_message' not implemented.")
-            else:
-                await message.channel.send("❌ Failed to process message. Please try again later.")
+                    await message.channel.send("❌ Failed to process message. Please try again later.")
+                    logging.error("[Router] Invalid response structure from API")
+
+            except ValueError as e:
+                # Handle specific API response structure errors
+                await message.channel.send("❌ An error occurred while processing your message. The service may be temporarily unavailable.")
+                logging.error(f"[Router] API response structure error: {str(e)}")
+            except Exception as e:
+                # Handle other API errors
+                await message.channel.send("❌ An error occurred while processing your message. Please try again later.")
+                logging.error(f"[Router] API error: {str(e)}")
 
         except Exception as e:
             logging.error(f"[Router] Error routing message: {str(e)}")
             await message.channel.send("❌ An error occurred while processing your message.")
 
     async def cog_load(self):
-        """Called when the cog is loaded. Sync slash commands."""
+        """Called when the cog is loaded. Start command syncing in the background."""
         try:
-            await self.bot.tree.sync()
-            logging.info("[Router] Slash commands synced successfully")
+            # Start command syncing in the background
+            self.sync_task = asyncio.create_task(self._sync_commands_with_backoff())
+            logging.info("[Router] Started command sync task in background")
         except Exception as e:
-            logging.error(f"[Router] Failed to sync slash commands: {e}")
+            logging.error(f"[Router] Failed to start command sync task: {e}")
 
 async def setup(bot):
     await bot.add_cog(RouterCog(bot))

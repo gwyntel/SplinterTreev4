@@ -350,51 +350,62 @@ class API:
                 return self._stream_response(stream, requested_at, payload, provider, user_id, guild_id, prompt_file, model_cog)
             else:
                 requested_at = int(time.time() * 1000)
-                response = await self.openai_client.chat.completions.create(**payload)
-                received_at = int(time.time() * 1000)
-                
-                result = {
-                    'choices': [{
-                        'message': {
-                            'content': response.choices[0].message.content,
-                            'role': 'assistant'
-                        }
-                    }]
-                }
-
-                # Add tool calls if present
-                if hasattr(response.choices[0].message, 'tool_calls') and response.choices[0].message.tool_calls:
-                    result['choices'][0]['message']['tool_calls'] = [
-                        {
-                            'id': tool_call.id,
-                            'type': tool_call.type,
-                            'function': {
-                                'name': tool_call.function.name,
-                                'arguments': tool_call.function.arguments
+                try:
+                    response = await self.openai_client.chat.completions.create(**payload)
+                    received_at = int(time.time() * 1000)
+                    
+                    # Verify response structure
+                    if not hasattr(response, 'choices') or not response.choices:
+                        error_msg = f"Invalid response structure from OpenRouter API: {response}"
+                        logger.error(f"[API] {error_msg}")
+                        raise ValueError(error_msg)
+                    
+                    result = {
+                        'choices': [{
+                            'message': {
+                                'content': response.choices[0].message.content,
+                                'role': 'assistant'
                             }
-                        }
-                        for tool_call in response.choices[0].message.tool_calls
-                    ]
-                
-                # Log completion
-                await self.report(
-                    requested_at=requested_at,
-                    received_at=received_at,
-                    req_payload=payload,
-                    resp_payload=result,
-                    status_code=200,
-                    tags={
-                        "source": provider or "openrouter",
-                        "user_id": str(user_id) if user_id else None,
-                        "guild_id": str(guild_id) if guild_id else None,
-                        "prompt_file": prompt_file,
-                        "model_cog": model_cog
-                    },
-                    user_id=user_id,
-                    guild_id=guild_id
-                )
-                
-                return result
+                        }]
+                    }
+
+                    # Add tool calls if present
+                    if hasattr(response.choices[0].message, 'tool_calls') and response.choices[0].message.tool_calls:
+                        result['choices'][0]['message']['tool_calls'] = [
+                            {
+                                'id': tool_call.id,
+                                'type': tool_call.type,
+                                'function': {
+                                    'name': tool_call.function.name,
+                                    'arguments': tool_call.function.arguments
+                                }
+                            }
+                            for tool_call in response.choices[0].message.tool_calls
+                        ]
+                    
+                    # Log completion
+                    await self.report(
+                        requested_at=requested_at,
+                        received_at=received_at,
+                        req_payload=payload,
+                        resp_payload=result,
+                        status_code=200,
+                        tags={
+                            "source": provider or "openrouter",
+                            "user_id": str(user_id) if user_id else None,
+                            "guild_id": str(guild_id) if guild_id else None,
+                            "prompt_file": prompt_file,
+                            "model_cog": model_cog
+                        },
+                        user_id=user_id,
+                        guild_id=guild_id
+                    )
+                    
+                    return result
+                except Exception as e:
+                    error_msg = f"OpenRouter API error: {str(e)}"
+                    logger.error(f"[API] {error_msg}")
+                    raise ValueError(error_msg)
             
         except Exception as e:
             error_message = str(e)
