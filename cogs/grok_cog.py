@@ -12,11 +12,11 @@ class GrokCog(BaseCog):
             nickname="Grok Beta",
             trigger_words=['grok', 'grokbeta', 'grok beta'],
             model="x-ai/grok-beta",
-            vision_model="x-ai/grok-vision-beta",
             provider="openrouter",
             # prompt_file="grok_prompts",  # Uncomment and update if needed
             supports_vision=True  
         )
+        self.vision_model = "x-ai/grok-vision-beta"  # Assign vision_model within the class
         logging.debug(f"[Grok] Initialized with raw_prompt: {self.raw_prompt}")
         logging.debug(f"[Grok] Using provider: {self.provider}")
         logging.debug(f"[Grok] Vision support: {self.supports_vision}")
