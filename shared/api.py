@@ -85,6 +85,7 @@ class API:
             # These will be initialized in setup()
             self.session = None
             self.openai_client = None
+            self.infermatic_client = None
 
     async def setup(self):
         """Async initialization"""
@@ -104,10 +105,25 @@ class API:
             # Initialize OpenAI client with Helicone Gateway URL
             self.openai_client = AsyncOpenAI(
                 api_key=OPENROUTER_API_KEY,
-                base_url="https://openrouter.helicone.ai/api/v1",
+                base_url="https://gateway.helicone.ai/v1",
                 default_headers={
                     'Authorization': f'Bearer {OPENROUTER_API_KEY}',
                     'Helicone-Auth': f'Bearer {HELICONE_API_KEY}',
+                    'Helicone-Target-Url': "https://openrouter.ai/api",
+                    'HTTP-Referer': 'https://github.com/gwyntel/SplinterTreev4',
+                    'X-Title': 'SplinterTree by GwynTel',
+                },
+                timeout=30.0
+            )
+
+            # Initialize Infermatic client
+            self.infermatic_client = AsyncOpenAI(
+                api_key=HELICONE_API_KEY,
+                base_url="https://gateway.helicone.ai/v1",
+                default_headers={
+                    'Authorization': f'Bearer {HELICONE_API_KEY}',
+                    'Helicone-Auth': f'Bearer {HELICONE_API_KEY}',
+                    'Helicone-Target-Url': "https://api.totalgpt.ai",
                     'HTTP-Referer': 'https://github.com/gwyntel/SplinterTreev4',
                     'X-Title': 'SplinterTree by GwynTel',
                 },
@@ -141,6 +157,64 @@ class API:
         except Exception as e:
             logger.error(f"[API] Failed to initialize database schema: {str(e)}")
             raise
+
+    async def call_provider(self, provider: str, **kwargs) -> Union[Dict, AsyncGenerator[str, None]]:
+        """Call the specified provider (OpenRouter or Infermatic)"""
+        if self.session is None:
+            await self.setup()
+
+        client = self.openai_client if provider == "openrouter" else self.infermatic_client
+        try:
+            await self._enforce_rate_limit()
+            logger.info(f"[API] Calling provider: {provider} with payload: {kwargs}")
+            if kwargs.get("stream", False):
+                stream = await client.chat.completions.create(**kwargs)
+                return self._stream_response(stream, **kwargs)
+            else:
+                response = await client.chat.completions.create(**kwargs)
+                logger.info(f"[API] Response from provider {provider}: {response}")
+                return response
+        except Exception as e:
+            logger.error(f"[API] Error calling {provider}: {str(e)}")
+            raise
+
+    async def _stream_response(self, stream, requested_at: int, payload: Dict, provider: str, user_id: str, guild_id: str, prompt_file: str, model_cog: str) -> AsyncGenerator[str, None]:
+        """Handle streaming response"""
+        try:
+            async for chunk in stream:
+                if chunk.choices and hasattr(chunk.choices[0].delta, 'content') and chunk.choices[0].delta.content is not None:
+                    yield chunk.choices[0].delta.content
+                elif chunk.choices and hasattr(chunk.choices[0].delta, 'tool_calls') and chunk.choices[0].delta.tool_calls:
+                    # Handle tool call chunks if present
+                    tool_call = chunk.choices[0].delta.tool_calls[0]
+                    if hasattr(tool_call, 'function'):
+                        yield json.dumps({
+                            'name': tool_call.function.name if hasattr(tool_call.function, 'name') else None,
+                            'arguments': tool_call.function.arguments if hasattr(tool_call.function, 'arguments') else None
+                        })
+
+            received_at = int(time.time() * 1000)
+            
+            # Log completion
+            await self.report(
+                requested_at=requested_at,
+                received_at=received_at,
+                req_payload=payload,
+                resp_payload={"choices": [{"message": {"content": "Streaming response completed"}}]},
+                status_code=200,
+                tags={
+                    "source": provider or "openrouter",
+                    "user_id": str(user_id) if user_id else None,
+                    "guild_id": str(guild_id) if guild_id else None,
+                    "prompt_file": prompt_file,
+                    "model_cog": model_cog
+                },
+                user_id=user_id,
+                guild_id=guild_id
+            )
+        except Exception as e:
+            logger.error(f"[API] Error in stream response: {str(e)}")
+            yield f"Error: {str(e)}"
 
     async def _download_image(self, url: str) -> Optional[bytes]:
         """Download image from URL with timeout and retries"""
