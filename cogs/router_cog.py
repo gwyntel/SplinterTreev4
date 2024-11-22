@@ -285,7 +285,7 @@ class RouterCog(commands.Cog):
             logging.error(f"[Router] Error in uptime command: {str(e)}")
             await self.send_response(ctx, "❌ Error getting uptime. Please try again later.")
 
-    async def handle_message(self, message: discord.Message):
+    async def handle_message(self, message):
         """Route the message to the appropriate cog based on the model's decision."""
         try:
             channel_id = str(message.channel.id)
@@ -325,26 +325,26 @@ class RouterCog(commands.Cog):
             ]
 
             try:
-                # Call the routing model
-                response = await api.call_openpipe(
-                    messages=messages,
-                    model='mistralai/ministral-3b',
-                    user_id=str(message.author.id),
-                    guild_id=str(message.guild.id) if message.guild else None
-                )
+                # Start typing indicator
+                async with message.channel.typing():
+                    # Call the routing model with streaming enabled
+                    response_stream = await api.call_openpipe(
+                        messages=messages,
+                        model='mistralai/ministral-3b',
+                        stream=True,  # Enable streaming
+                        user_id=str(message.author.id),
+                        guild_id=str(message.guild.id) if message.guild else None
+                    )
 
-                # Log the full model response for debugging
-                logging.info(f"[Router] Full model response: {response}")
+                    # Process the streaming response
+                    routing_response = ""
+                    async for chunk in response_stream:
+                        if chunk:
+                            routing_response += chunk
 
-                # Extract the routing decision
-                if response and 'choices' in response and len(response['choices']) > 0:
-                    routing_response = response['choices'][0]['message']['content']
                     # Clean up the response to get the cog name
                     cog_name = routing_response.strip().split('\n')[0].strip()
-                    
-                    # Remove any extra text or punctuation
                     cog_name = ''.join(c for c in cog_name if c.isalnum())
-                    
                     logging.info(f"[Router] Cleaned cog name: {cog_name}")
 
                     # Attempt to get the cog
@@ -359,9 +359,6 @@ class RouterCog(commands.Cog):
                     else:
                         logging.error(f"[Router] Cog '{cog_name}' not found or 'handle_message' not implemented")
                         await message.channel.send("❌ Unable to route message to the appropriate module.")
-                else:
-                    logging.error("[Router] Invalid response structure from API")
-                    await message.channel.send("❌ Failed to process message. Please try again later.")
 
             except ValueError as e:
                 # Handle specific API response structure errors

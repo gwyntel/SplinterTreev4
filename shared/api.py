@@ -275,45 +275,54 @@ class API:
         return 'application/octet-stream'
 
     async def _stream_response(self, stream, requested_at: int, payload: Dict, provider: str, user_id: str, guild_id: str, prompt_file: str, model_cog: str) -> AsyncGenerator[str, None]:
-        """Handle streaming response"""
+        """Handle streaming response with improved chunk handling"""
+        full_response = ""
         try:
             async for chunk in stream:
-                if chunk.choices and hasattr(chunk.choices[0].delta, 'content') and chunk.choices[0].delta.content is not None:
-                    yield chunk.choices[0].delta.content
-                elif chunk.choices and hasattr(chunk.choices[0].delta, 'tool_calls') and chunk.choices[0].delta.tool_calls:
-                    # Handle tool call chunks if present
-                    tool_call = chunk.choices[0].delta.tool_calls[0]
+                if not chunk or not chunk.choices:
+                    continue
+
+                delta = chunk.choices[0].delta
+                if hasattr(delta, 'content') and delta.content:
+                    full_response += delta.content
+                    yield delta.content
+                elif hasattr(delta, 'tool_calls') and delta.tool_calls:
+                    tool_call = delta.tool_calls[0]
                     if hasattr(tool_call, 'function'):
-                        yield json.dumps({
+                        tool_data = {
                             'name': tool_call.function.name if hasattr(tool_call.function, 'name') else None,
                             'arguments': tool_call.function.arguments if hasattr(tool_call.function, 'arguments') else None
-                        })
+                        }
+                        yield json.dumps(tool_data)
+                        full_response += json.dumps(tool_data)
 
+            # Log completion with full accumulated response
             received_at = int(time.time() * 1000)
-            
-            # Log completion
             await self.report(
                 requested_at=requested_at,
                 received_at=received_at,
                 req_payload=payload,
-                resp_payload={"choices": [{"message": {"content": "Streaming response completed"}}]},
+                resp_payload={"choices": [{"message": {"content": full_response}}]},
                 status_code=200,
                 tags={
                     "source": provider or "openrouter",
                     "user_id": str(user_id) if user_id else None,
                     "guild_id": str(guild_id) if guild_id else None,
                     "prompt_file": prompt_file,
-                    "model_cog": model_cog
+                    "model_cog": model_cog,
+                    "streaming": True
                 },
                 user_id=user_id,
                 guild_id=guild_id
             )
         except Exception as e:
             logger.error(f"[API] Error in stream response: {str(e)}")
-            yield f"Error: {str(e)}"
+            error_msg = f"Error: {str(e)}"
+            yield error_msg
+            full_response += error_msg
 
     async def call_openpipe(self, messages: List[Dict[str, Union[str, List[Dict[str, Any]]]]], model: str, temperature: float = None, stream: bool = False, max_tokens: int = None, provider: str = None, user_id: str = None, guild_id: str = None, prompt_file: str = None, model_cog: str = None, tools: List[Dict] = None, tool_choice: Union[str, Dict] = None) -> Union[Dict, AsyncGenerator[str, None]]:
-        """Call OpenRouter API with support for all features"""
+        """Call OpenRouter API with improved streaming support"""
         if self.session is None:
             await self.setup()
 
@@ -321,10 +330,7 @@ class API:
             await self._enforce_rate_limit()
             
             logger.debug(f"[API] Making OpenRouter request to model: {model}")
-            logger.debug(f"[API] Request messages structure:")
-            for msg in messages:
-                logger.debug(f"[API] Message role: {msg.get('role')}")
-                logger.debug(f"[API] Message content: {msg.get('content')}")
+            logger.debug(f"[API] Stream mode: {stream}")
             
             validated_messages = await self._validate_message_roles(messages)
             
@@ -343,18 +349,16 @@ class API:
             if tool_choice:
                 payload["tool_choice"] = tool_choice
 
-            # Make API request
-            if stream:
-                stream = await self.openai_client.chat.completions.create(**payload)
-                requested_at = int(time.time() * 1000)
-                return self._stream_response(stream, requested_at, payload, provider, user_id, guild_id, prompt_file, model_cog)
-            else:
-                requested_at = int(time.time() * 1000)
-                try:
-                    response = await self.openai_client.chat.completions.create(**payload)
+            requested_at = int(time.time() * 1000)
+
+            try:
+                response = await self.openai_client.chat.completions.create(**payload)
+                
+                if stream:
+                    return self._stream_response(response, requested_at, payload, provider, user_id, guild_id, prompt_file, model_cog)
+                else:
                     received_at = int(time.time() * 1000)
                     
-                    # Verify response structure
                     if not hasattr(response, 'choices') or not response.choices:
                         error_msg = f"Invalid response structure from OpenRouter API: {response}"
                         logger.error(f"[API] {error_msg}")
@@ -395,17 +399,19 @@ class API:
                             "user_id": str(user_id) if user_id else None,
                             "guild_id": str(guild_id) if guild_id else None,
                             "prompt_file": prompt_file,
-                            "model_cog": model_cog
+                            "model_cog": model_cog,
+                            "streaming": False
                         },
                         user_id=user_id,
                         guild_id=guild_id
                     )
                     
                     return result
-                except Exception as e:
-                    error_msg = f"OpenRouter API error: {str(e)}"
-                    logger.error(f"[API] {error_msg}")
-                    raise ValueError(error_msg)
+
+            except Exception as e:
+                error_msg = f"OpenRouter API error: {str(e)}"
+                logger.error(f"[API] {error_msg}")
+                raise ValueError(error_msg)
             
         except Exception as e:
             error_message = str(e)
