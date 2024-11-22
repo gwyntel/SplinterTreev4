@@ -16,10 +16,6 @@ class RouterCog(commands.Cog):
         # Load the system prompt
         self.router_system_prompt = self._load_router_system_prompt()
 
-        # Set default permissions for slash commands
-        self.activate_command.default_permissions = discord.Permissions(administrator=True)
-        self.deactivate_command.default_permissions = discord.Permissions(administrator=True)
-
     def _load_router_system_prompt(self):
         """Load the router system prompt from a file or return the default."""
         try:
@@ -276,6 +272,18 @@ class RouterCog(commands.Cog):
                 guild_id = str(message.guild.id)
                 if guild_id not in self.activated_channels or channel_id not in self.activated_channels[guild_id]:
                     return  # Channel not activated
+
+            # Check if the message contains any excluded model names
+            excluded_models = [
+                'Gemini', 'Magnum', 'Sonar', 'Sydney', 'Goliath',
+                'Pixtral', 'Mixtral', 'Claude3Haiku', 'Inferor',
+                'Nemotron', 'Noromaid', 'Rplus', 'Router',
+                'Llama32_11b', 'Llama32_90b', 'OpenChat', 'Dolphin',
+                'Gemma', 'Ministral', 'Liquid', 'Hermes', 'Sorcerer'
+            ]
+            if any(model in message.content for model in excluded_models):
+                logging.info(f"[Router] Message contains excluded model name. Skipping response.")
+                return  # Do not respond if an excluded model name is mentioned
 
             # Prepare the system prompt
             system_prompt = self.router_system_prompt
