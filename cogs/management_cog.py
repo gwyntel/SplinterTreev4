@@ -41,7 +41,7 @@ class ManagementCog(BaseCog):
     async def ban_user(self, user_id: str) -> bool:
         """Add a user to the banned users table"""
         try:
-            db = sqlite3.connect('databases/user_settings.db')
+            db = sqlite3.connect('databases/interaction_logs.db')
             cursor = db.cursor()
             cursor.execute('INSERT OR REPLACE INTO banned_users (user_id) VALUES (?)', (str(user_id),))
             db.commit()

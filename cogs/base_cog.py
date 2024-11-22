@@ -89,7 +89,7 @@ class BaseCog(commands.Cog):
     async def is_user_banned(self, user_id: str) -> bool:
         """Check if a user is banned from bot interactions"""
         try:
-            db = sqlite3.connect('databases/user_settings.db')
+            db = sqlite3.connect('databases/interaction_logs.db')
             cursor = db.cursor()
             cursor.execute('SELECT 1 FROM banned_users WHERE user_id = ?', (str(user_id),))
             result = cursor.fetchone() is not None

@@ -348,25 +348,29 @@ class RouterCog(commands.Cog):
                     logging.info(f"[Router] Cleaned cog name: {cog_name}")
 
                     # Attempt to get the cog
-                    cog = self.bot.get_cog(cog_name + "Cog")
+                    cog_name = cog_name + "Cog"
+                    logging.info(f"[Router] Looking for cog: {cog_name}")
+                    cog = self.bot.get_cog(cog_name)
+                    
                     if cog and hasattr(cog, 'handle_message'):
+                        logging.info(f"[Router] Found cog {cog_name}, forwarding message")
                         # Forward the message to the cog
                         await cog.handle_message(message)
                     else:
+                        logging.error(f"[Router] Cog '{cog_name}' not found or 'handle_message' not implemented")
                         await message.channel.send("❌ Unable to route message to the appropriate module.")
-                        logging.error(f"[Router] Cog '{cog_name}Cog' not found or 'handle_message' not implemented.")
                 else:
-                    await message.channel.send("❌ Failed to process message. Please try again later.")
                     logging.error("[Router] Invalid response structure from API")
+                    await message.channel.send("❌ Failed to process message. Please try again later.")
 
             except ValueError as e:
                 # Handle specific API response structure errors
-                await message.channel.send("❌ An error occurred while processing your message. The service may be temporarily unavailable.")
                 logging.error(f"[Router] API response structure error: {str(e)}")
+                await message.channel.send("❌ An error occurred while processing your message. The service may be temporarily unavailable.")
             except Exception as e:
                 # Handle other API errors
-                await message.channel.send("❌ An error occurred while processing your message. Please try again later.")
                 logging.error(f"[Router] API error: {str(e)}")
+                await message.channel.send("❌ An error occurred while processing your message. Please try again later.")
 
         except Exception as e:
             logging.error(f"[Router] Error routing message: {str(e)}")
@@ -375,9 +379,13 @@ class RouterCog(commands.Cog):
     async def cog_load(self):
         """Called when the cog is loaded. Start command syncing in the background."""
         try:
-            # Start command syncing in the background
-            self.sync_task = asyncio.create_task(self._sync_commands_with_backoff())
-            logging.info("[Router] Started command sync task in background")
+            # In test environment, sync commands directly
+            if hasattr(self.bot, '_test_mode'):
+                await self._sync_commands_with_backoff()
+            else:
+                # In production, start command syncing in the background
+                self.sync_task = asyncio.create_task(self._sync_commands_with_backoff())
+                logging.info("[Router] Started command sync task in background")
         except Exception as e:
             logging.error(f"[Router] Failed to start command sync task: {e}")
 
