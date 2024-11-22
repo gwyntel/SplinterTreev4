@@ -93,17 +93,21 @@ class API:
             timeout = aiohttp.ClientTimeout(total=30, connect=10, sock_read=10)
             self.session = aiohttp.ClientSession(
                 headers={
+                    'Authorization': f'Bearer {OPENROUTER_API_KEY}',
+                    'Helicone-Auth': f'Bearer {HELICONE_API_KEY}',
                     'HTTP-Referer': 'https://github.com/gwyntel/SplinterTreev4',
                     'X-Title': 'SplinterTree by GwynTel'
                 },
                 timeout=timeout
             )
             
-            # Initialize OpenAI client with OpenRouter base URL
+            # Initialize OpenAI client with Helicone Gateway URL
             self.openai_client = AsyncOpenAI(
                 api_key=OPENROUTER_API_KEY,
-                base_url="https://openrouter.ai/api/v1",
+                base_url="https://openrouter.helicone.ai/api/v1",
                 default_headers={
+                    'Authorization': f'Bearer {OPENROUTER_API_KEY}',
+                    'Helicone-Auth': f'Bearer {HELICONE_API_KEY}',
                     'HTTP-Referer': 'https://github.com/gwyntel/SplinterTreev4',
                     'X-Title': 'SplinterTree by GwynTel',
                 },
