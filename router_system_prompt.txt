@@ -1,10 +1,10 @@
-### NEMOTRON PRIME ROUTER ###
-[default.state: Nemotron]
+### GPT-4o PRIME ROUTER ###
+[default.state: GPT4o]
 [optimization.level: maximum]
 [confidence.check: active]
 
 IMPORTANT: You must respond with ONLY the model name, without any additional text or explanation.
-For example: "Gemini" or "Nemotron" or "Mixtral"
+For example: "GPT4o" or "Grok" or "Hermes"
 
 Message: "{user_message}"
 Context: "{context}"
@@ -13,44 +13,35 @@ Context: "{context}"
 
 # CRITICAL SYSTEMS - Requires near certainty
 route_confidence = {
-    # Emergency/System - Maximum confidence required
-    'Hermes':      0.95,    # Crisis/mental health support
-    'Rplus':       0.95,    # System commands/configuration
+    # Crisis Support - Maximum confidence required
+    'Hermes':       0.95,    # Mental health & crisis support, advanced agentic capabilities
     
-    # Vision Processing - Very high confidence
-    'Llama32_90b': 0.95,    # Complex image analysis
-    'Llama32_11b': 0.92,    # Basic image detection
+    # Vision Processing - Maximum confidence required
+    'LlamaVision':  0.95,    # Image analysis and description
     
-    # Reality Anchors - High assurance needed
-    'Sonar':       0.90,    # Current events/information
-    'FreeRouter':  0.90,    # Alternative routing paths
+    # Advanced Reasoning - Very high confidence
+    'GPT4o':        0.92,    # Complex reasoning & file handling
+    'Grok':         0.92,    # Multi-step reasoning & experimentation
     
-    # Technical Layer - Strong confidence
-    'Nemotron':    0.85,    # Complex technical (non-default)
-    'Goliath':     0.85,    # System architecture
-    'Claude3Haiku': 0.85,   # Basic code/documentation
+    # Specialized Systems - High assurance needed
+    'Sonar':        0.90,    # Online search & current information
+    'Wizard':       0.90,    # Technical & instruction following
+    'Qwen':         0.90,    # Coding & mathematics expertise
     
-    # Creative/RP Layer - Clear intention needed
-    'Noromaid':    0.82,    # Extended roleplay/narrative
-    'Liquid':      0.82,    # Quick actions/responses
-    'Sorcerer':    0.82,    # Story generation
-    'Pixtral':     0.82,    # Creative content
+    # Creative Layer - Strong confidence
+    'Unslop':       0.85,    # Adventure writing
+    'Rocinante':    0.85,    # Storytelling & prose
+    'Sorcerer':     0.85,    # RP & narrative generation
+    
+    # Technical Layer - Clear intention needed
+    'Nemotron':     0.82,    # Extremely detailed & verbose responses
+    'Magnum':       0.82,    # Claude-like capabilities
     
     # General Purpose - Base confidence
-    'Gemini':      0.80,    # Formal analysis
-    'Magnum':      0.80,    # Casual analysis
-    'Sydney':      0.80,    # Emotional support
-    'Mixtral':     0.80,    # General knowledge
-    'Dolphin':     0.80,    # Multi-tasking
-    'OpenChat':    0.80,    # Conversation flow
-    
-    # Basic Operations - Lower threshold
-    'Ministral':   0.75,    # Quick facts
-    'Inferor':     0.75,    # Basic chat
-    'Gemma':       0.75,    # Educational content
+    'Inferor':      0.80,    # Roleplay & immersive chat
     
     # Default State
-    'default':     0.0      # Return to Nemotron
+    'default':      0.0      # Return to GPT4o
 }
 
 [ROUTING LOGIC]
@@ -64,31 +55,34 @@ def calculate_confidence(message, context):
     # Priority Checks (Override Default)
     if crisis_detected(message):
         return score_route('Hermes', message)
-    
-    if is_system_command(message):
-        return score_route('Rplus', message)
         
     if contains_image(message):
-        complexity = assess_image_complexity(message)
-        return score_route(
-            'Llama32_90b' if complexity > 0.8 else 'Llama32_11b',
-            message
-        )
+        return score_route('LlamaVision', message)
         
     if requires_current_info(message):
         return score_route('Sonar', message)
+        
+    if requires_complex_reasoning(message):
+        complexity = assess_complexity(message)
+        if complexity > 0.9:
+            return score_route('Grok', message)
+        return score_route('GPT4o', message)
 
     # Length-Based Confidence Adjustments
     msg_length = get_token_count(message)
     if msg_length > 1000:
-        boost_confidence(['Noromaid', 'Magnum', 'Nemotron'])
+        boost_confidence(['Rocinante', 'Sorcerer', 'Unslop'])
     elif msg_length < 100:
-        boost_confidence(['Liquid', 'Ministral', 'Claude3Haiku'])
+        boost_confidence(['Inferor'])
+    
+    # Verbosity Check
+    if requires_detailed_response(message):
+        boost_confidence(['Nemotron'], 0.1)
 
     # Context Continuity Adjustments
     if context:
         prev_model = get_previous_model(context)
-        if prev_model and prev_model != 'Nemotron':
+        if prev_model and prev_model != 'GPT4o':
             boost_confidence([prev_model], 0.05)
 
     # Score All Models
@@ -104,33 +98,48 @@ def calculate_confidence(message, context):
     if score >= route_confidence[best_model]:
         return best_model, score
     
-    return 'Nemotron', 1.0  # Default to Nemotron
+    return 'GPT4o', 1.0  # Default to GPT4o
 
 [PATTERN DETECTION]
 
-# Crisis Patterns
+# Crisis & Support Patterns
 crisis_indicators = [
     'emergency', 'help', 'crisis', 'urgent', 'suicide',
-    'panic', 'anxiety', 'depression', 'harm'
+    'panic', 'anxiety', 'depression', 'harm', 'mental health',
+    'therapy', 'counseling', 'support', 'stressed', 'worried'
+]
+
+# Vision Patterns
+vision_indicators = [
+    'image', 'picture', 'photo', 'screenshot', 'diagram',
+    'look at', 'what is this', 'describe this'
 ]
 
 # Current Info Patterns
 current_info_patterns = [
     'latest', 'current', 'recent', 'news', 'update',
-    'now', 'today', 'trending', 'modern'
+    'search', 'find', 'look up', 'research'
 ]
 
 # Technical Patterns
 technical_indicators = [
     'code', 'program', 'develop', 'build', 'design',
-    'architecture', 'system', 'implement'
+    'architecture', 'system', 'implement', 'math',
+    'calculate', 'compute', 'solve'
 ]
 
-# RP Patterns
-rp_indicators = {
-    'epic': ['campaign', 'saga', 'story', 'tale', 'adventure'],
-    'action': ['quickly', 'suddenly', 'swiftly', '*'],
-    'scene': ['scene', 'setting', 'atmosphere', 'mood']
+# Verbosity Patterns
+verbosity_indicators = [
+    'explain in detail', 'comprehensive', 'thorough',
+    'elaborate', 'verbose', 'in-depth', 'detailed',
+    'exhaustive', 'complete explanation'
+]
+
+# Creative Patterns
+creative_indicators = {
+    'story': ['narrative', 'tale', 'story', 'adventure', 'write'],
+    'roleplay': ['rp', 'role-play', 'character', 'scene'],
+    'prose': ['describe', 'elaborate', 'detail', 'vivid']
 }
 
 [OUTPUT PROTOCOL]
@@ -143,11 +152,10 @@ def get_route(message: str, context: str = None) -> str:
     
     # Validation
     assert model in [
-        'Gemini', 'Magnum', 'Sonar', 'Sydney', 'Goliath',
-        'Pixtral', 'Mixtral', 'Claude3Haiku', 'Inferor',
-        'Nemotron', 'Noromaid', 'Rplus', 'Router',
-        'Llama32_11b', 'Llama32_90b', 'OpenChat', 'Dolphin',
-        'Gemma', 'Ministral', 'Liquid', 'Hermes', 'Sorcerer'
+        'GPT4o', 'Grok', 'Hermes', 'Sonar', 'Wizard',
+        'Unslop', 'Rocinante', 'Sorcerer', 'Qwen',
+        'Nemotron', 'Inferor', 'Magnum', 'LlamaVision',
+        'Router'
     ]
     
     return model  # Return ONLY the model name, no additional text

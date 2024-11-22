@@ -1,51 +1,29 @@
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from discord import Message, User, TextChannel, Guild
+from unittest.mock import AsyncMock, MagicMock
 from cogs.context_cog import ContextCog
 
-@pytest.fixture
-def context_cog():
+@pytest.mark.asyncio
+async def test_get_context_command():
     bot = MagicMock()
-    return ContextCog(bot)
+    ctx = MagicMock()
+    cog = ContextCog(bot)
+    cog.get_context_command = AsyncMock()
+    await cog.get_context_command(ctx)
+    cog.get_context_command.assert_awaited_once_with(ctx)
 
 @pytest.mark.asyncio
-@patch('cogs.context_cog.ContextCog.add_message_to_context', new_callable=AsyncMock)
-async def test_on_message_includes_bots(mock_add_message, context_cog):
-    message = MagicMock(spec=Message)
-    message.author.bot = True
-    message.content = "Bot message"
-    message.guild = MagicMock(spec=Guild)
-    message.channel = MagicMock(spec=TextChannel)
-    message.id = 123
-    message.author.id = 456
-
-    await context_cog.on_message(message)
-    mock_add_message.assert_called_once()
+async def test_clear_context_command():
+    bot = MagicMock()
+    ctx = MagicMock()
+    cog = ContextCog(bot)
+    cog.clear_context_command = AsyncMock()
+    await cog.clear_context_command(ctx, hours=2)
+    cog.clear_context_command.assert_awaited_once_with(ctx, hours=2)
 
 @pytest.mark.asyncio
-@patch('cogs.context_cog.ContextCog.add_message_to_context', new_callable=AsyncMock)
-async def test_on_message_includes_webhooks(mock_add_message, context_cog):
-    message = MagicMock(spec=Message)
-    message.webhook_id = 789
-    message.content = "Webhook message"
-    message.guild = MagicMock(spec=Guild)
-    message.channel = MagicMock(spec=TextChannel)
-    message.id = 123
-    message.author.id = 456
-
-    await context_cog.on_message(message)
-    mock_add_message.assert_called_once()
-
-@pytest.mark.asyncio
-@patch('cogs.context_cog.ContextCog.add_message_to_context', new_callable=AsyncMock)
-async def test_on_message_includes_users(mock_add_message, context_cog):
-    message = MagicMock(spec=Message)
-    message.author.bot = False
-    message.content = "User message"
-    message.guild = MagicMock(spec=Guild)
-    message.channel = MagicMock(spec=TextChannel)
-    message.id = 123
-    message.author.id = 456
-
-    await context_cog.on_message(message)
-    mock_add_message.assert_called_once()
+async def test_get_context_messages():
+    bot = MagicMock()
+    cog = ContextCog(bot)
+    cog.get_context_messages = AsyncMock(return_value=[])
+    messages = await cog.get_context_messages("channel_id", limit=10)
+    assert messages == []

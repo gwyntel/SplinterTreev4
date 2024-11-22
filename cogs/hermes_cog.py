@@ -10,9 +10,9 @@ class HermesCog(BaseCog):
             bot=bot,
             name="Hermes",
             nickname="Hermes",
-            trigger_words=['hermes'],
-            model="nousresearch/hermes-3-llama-3.1-405b",
-            provider="openrouter",
+            trigger_words=['hermes', 'hermes-3', 'nous'],
+            model="openpipe:openrouter/nousresearch/hermes-3-llama-3.1-405b",
+            provider="openpipe",
             prompt_file="hermes_prompts",
             supports_vision=False
         )
@@ -89,7 +89,7 @@ class HermesCog(BaseCog):
                 model=self.model,
                 temperature=temperature,
                 stream=True,
-                provider="openrouter",
+                provider="openpipe",
                 user_id=user_id,
                 guild_id=guild_id,
                 prompt_file="hermes_prompts"

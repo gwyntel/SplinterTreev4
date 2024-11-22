@@ -4,34 +4,34 @@ import logging
 from .base_cog import BaseCog
 import json
 
-class MixtralCog(BaseCog):
+class GPT4OCog(BaseCog):
     def __init__(self, bot):
         super().__init__(
             bot=bot,
-            name="Mixtral",
-            nickname="Mixtral",
-            trigger_words=['mixtral'],
-            model="mistralai/pixtral-12b",
-            provider="openrouter",
-            prompt_file="mixtral_prompts",
+            name="GPT-4o",
+            nickname="GPT4o",
+            trigger_words=['gpt4o', '4o', 'openai'],
+            model="openpipe:openrouter/openai/gpt-4o-2024-11-20",
+            provider="openpipe",
+            prompt_file="gpt4o_prompts",
             supports_vision=False
         )
-        logging.debug(f"[Mixtral] Initialized with raw_prompt: {self.raw_prompt}")
-        logging.debug(f"[Mixtral] Using provider: {self.provider}")
-        logging.debug(f"[Mixtral] Vision support: {self.supports_vision}")
+        logging.debug(f"[GPT-4o] Initialized with raw_prompt: {self.raw_prompt}")
+        logging.debug(f"[GPT-4o] Using provider: {self.provider}")
+        logging.debug(f"[GPT-4o] Vision support: {self.supports_vision}")
 
         # Load temperature settings
         try:
             with open('temperatures.json', 'r') as f:
                 self.temperatures = json.load(f)
         except Exception as e:
-            logging.error(f"[Mixtral] Failed to load temperatures.json: {e}")
+            logging.error(f"[GPT-4o] Failed to load temperatures.json: {e}")
             self.temperatures = {}
 
     @property
     def qualified_name(self):
         """Override qualified_name to match the expected cog name"""
-        return "Mixtral"
+        return "GPT-4o"
 
     def get_temperature(self):
         """Get temperature setting for this agent"""
@@ -72,12 +72,12 @@ class MixtralCog(BaseCog):
                 "content": message.content
             })
 
-            logging.debug(f"[Mixtral] Sending {len(messages)} messages to API")
-            logging.debug(f"[Mixtral] Formatted prompt: {formatted_prompt}")
+            logging.debug(f"[GPT-4o] Sending {len(messages)} messages to API")
+            logging.debug(f"[GPT-4o] Formatted prompt: {formatted_prompt}")
 
             # Get temperature for this agent
             temperature = self.get_temperature()
-            logging.debug(f"[Mixtral] Using temperature: {temperature}")
+            logging.debug(f"[GPT-4o] Using temperature: {temperature}")
 
             # Get user_id and guild_id
             user_id = str(message.author.id)
@@ -89,23 +89,23 @@ class MixtralCog(BaseCog):
                 model=self.model,
                 temperature=temperature,
                 stream=True,
-                provider="openrouter",
+                provider="openpipe",
                 user_id=user_id,
                 guild_id=guild_id,
-                prompt_file="mixtral_prompts"
+                prompt_file="gpt4o_prompts"
             )
 
             return response_stream
 
         except Exception as e:
-            logging.error(f"Error processing message for Mixtral: {e}")
+            logging.error(f"Error processing message for GPT-4o: {e}")
             return None
 async def setup(bot):
     try:
-        cog = MixtralCog(bot)
+        cog = GPT4OCog(bot)
         await bot.add_cog(cog)
-        logging.info(f"[Mixtral] Registered cog with qualified_name: {cog.qualified_name}")
+        logging.info(f"[GPT-4o] Registered cog with qualified_name: {cog.qualified_name}")
         return cog
     except Exception as e:
-        logging.error(f"[Mixtral] Failed to register cog: {e}", exc_info=True)
+        logging.error(f"[GPT-4o] Failed to register cog: {e}", exc_info=True)
         raise

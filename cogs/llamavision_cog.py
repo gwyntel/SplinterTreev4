@@ -4,34 +4,34 @@ import logging
 from .base_cog import BaseCog
 import json
 
-class RPlusCog(BaseCog):
+class LlamaVisionCog(BaseCog):
     def __init__(self, bot):
         super().__init__(
             bot=bot,
-            name="R-Plus",
-            nickname="RPlus",
-            trigger_words=['rplus', 'r plus', 'eos'],
-            model="cohere/command-r-plus",
-            provider="openrouter",
-            prompt_file="rplus_prompts",
-            supports_vision=False
+            name="LlamaVision",
+            nickname="LlamaVision",
+            trigger_words=['llamavision', 'vision', 'image', 'describe this image'],
+            model="openpipe:groq/llama-3.2-90b-vision-preview",
+            provider="openpipe",
+            prompt_file="llamavision_prompts",
+            supports_vision=True
         )
-        logging.debug(f"[R-Plus] Initialized with raw_prompt: {self.raw_prompt}")
-        logging.debug(f"[R-Plus] Using provider: {self.provider}")
-        logging.debug(f"[R-Plus] Vision support: {self.supports_vision}")
+        logging.debug(f"[LlamaVision] Initialized with raw_prompt: {self.raw_prompt}")
+        logging.debug(f"[LlamaVision] Using provider: {self.provider}")
+        logging.debug(f"[LlamaVision] Vision support: {self.supports_vision}")
 
         # Load temperature settings
         try:
             with open('temperatures.json', 'r') as f:
                 self.temperatures = json.load(f)
         except Exception as e:
-            logging.error(f"[R-Plus] Failed to load temperatures.json: {e}")
+            logging.error(f"[LlamaVision] Failed to load temperatures.json: {e}")
             self.temperatures = {}
 
     @property
     def qualified_name(self):
         """Override qualified_name to match the expected cog name"""
-        return "R-Plus"
+        return "LlamaVision"
 
     def get_temperature(self):
         """Get temperature setting for this agent"""
@@ -72,12 +72,12 @@ class RPlusCog(BaseCog):
                 "content": message.content
             })
 
-            logging.debug(f"[R-Plus] Sending {len(messages)} messages to API")
-            logging.debug(f"[R-Plus] Formatted prompt: {formatted_prompt}")
+            logging.debug(f"[LlamaVision] Sending {len(messages)} messages to API")
+            logging.debug(f"[LlamaVision] Formatted prompt: {formatted_prompt}")
 
             # Get temperature for this agent
             temperature = self.get_temperature()
-            logging.debug(f"[R-Plus] Using temperature: {temperature}")
+            logging.debug(f"[LlamaVision] Using temperature: {temperature}")
 
             # Get user_id and guild_id
             user_id = str(message.author.id)
@@ -89,23 +89,23 @@ class RPlusCog(BaseCog):
                 model=self.model,
                 temperature=temperature,
                 stream=True,
-                provider="openrouter",
+                provider="openpipe",
                 user_id=user_id,
                 guild_id=guild_id,
-                prompt_file="rplus_prompts"
+                prompt_file="llamavision_prompts"
             )
 
             return response_stream
 
         except Exception as e:
-            logging.error(f"Error processing message for R-Plus: {e}")
+            logging.error(f"Error processing message for LlamaVision: {e}")
             return None
 async def setup(bot):
     try:
-        cog = RPlusCog(bot)
+        cog = LlamaVisionCog(bot)
         await bot.add_cog(cog)
-        logging.info(f"[R-Plus] Registered cog with qualified_name: {cog.qualified_name}")
+        logging.info(f"[LlamaVision] Registered cog with qualified_name: {cog.qualified_name}")
         return cog
     except Exception as e:
-        logging.error(f"[R-Plus] Failed to register cog: {e}", exc_info=True)
+        logging.error(f"[LlamaVision] Failed to register cog: {e}", exc_info=True)
         raise

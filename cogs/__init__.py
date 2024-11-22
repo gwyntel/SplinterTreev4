@@ -1,1 +1,1 @@
-# This file makes the cogs directory a Python package
+# This file marks the cogs directory as a Python package.

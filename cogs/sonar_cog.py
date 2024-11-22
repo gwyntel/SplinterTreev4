@@ -10,9 +10,9 @@ class SonarCog(BaseCog):
             bot=bot,
             name="Sonar",
             nickname="Sonar",
-            trigger_words=['sonar'],
-            model="perplexity/llama-3.1-sonar-huge-128k-online",
-            provider="openrouter",
+            trigger_words=['sonar', 'perplexity', 'search'],
+            model="openpipe:openrouter/perplexity/llama-3.1-sonar-large-128k-online",
+            provider="openpipe",
             prompt_file="sonar_prompts",
             supports_vision=False
         )
@@ -89,7 +89,7 @@ class SonarCog(BaseCog):
                 model=self.model,
                 temperature=temperature,
                 stream=True,
-                provider="openrouter",
+                provider="openpipe",
                 user_id=user_id,
                 guild_id=guild_id,
                 prompt_file="sonar_prompts"

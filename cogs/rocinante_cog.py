@@ -4,34 +4,34 @@ import logging
 from .base_cog import BaseCog
 import json
 
-class OpenChatCog(BaseCog):
+class RocinanteCog(BaseCog):
     def __init__(self, bot):
         super().__init__(
             bot=bot,
-            name="OpenChat",
-            nickname="OpenChat",
-            trigger_words=['openchat'],
-            model="openchat/openchat-7b:free",
-            provider="openrouter",
-            prompt_file="openchat_prompts",
+            name="Rocinante",
+            nickname="Rocinante",
+            trigger_words=['rocinante'],
+            model="openpipe:infermatic/TheDrummer-Rocinante-12B-v1.1",
+            provider="openpipe",
+            prompt_file="rocinante_prompts",
             supports_vision=False
         )
-        logging.debug(f"[OpenChat] Initialized with raw_prompt: {self.raw_prompt}")
-        logging.debug(f"[OpenChat] Using provider: {self.provider}")
-        logging.debug(f"[OpenChat] Vision support: {self.supports_vision}")
+        logging.debug(f"[Rocinante] Initialized with raw_prompt: {self.raw_prompt}")
+        logging.debug(f"[Rocinante] Using provider: {self.provider}")
+        logging.debug(f"[Rocinante] Vision support: {self.supports_vision}")
 
         # Load temperature settings
         try:
             with open('temperatures.json', 'r') as f:
                 self.temperatures = json.load(f)
         except Exception as e:
-            logging.error(f"[OpenChat] Failed to load temperatures.json: {e}")
+            logging.error(f"[Rocinante] Failed to load temperatures.json: {e}")
             self.temperatures = {}
 
     @property
     def qualified_name(self):
         """Override qualified_name to match the expected cog name"""
-        return "OpenChat"
+        return "Rocinante"
 
     def get_temperature(self):
         """Get temperature setting for this agent"""
@@ -72,12 +72,12 @@ class OpenChatCog(BaseCog):
                 "content": message.content
             })
 
-            logging.debug(f"[OpenChat] Sending {len(messages)} messages to API")
-            logging.debug(f"[OpenChat] Formatted prompt: {formatted_prompt}")
+            logging.debug(f"[Rocinante] Sending {len(messages)} messages to API")
+            logging.debug(f"[Rocinante] Formatted prompt: {formatted_prompt}")
 
             # Get temperature for this agent
             temperature = self.get_temperature()
-            logging.debug(f"[OpenChat] Using temperature: {temperature}")
+            logging.debug(f"[Rocinante] Using temperature: {temperature}")
 
             # Get user_id and guild_id
             user_id = str(message.author.id)
@@ -89,23 +89,23 @@ class OpenChatCog(BaseCog):
                 model=self.model,
                 temperature=temperature,
                 stream=True,
-                provider="openrouter",
+                provider="openpipe",
                 user_id=user_id,
                 guild_id=guild_id,
-                prompt_file="openchat_prompts"
+                prompt_file="rocinante_prompts"
             )
 
             return response_stream
 
         except Exception as e:
-            logging.error(f"Error processing message for OpenChat: {e}")
+            logging.error(f"Error processing message for Rocinante: {e}")
             return None
 async def setup(bot):
     try:
-        cog = OpenChatCog(bot)
+        cog = RocinanteCog(bot)
         await bot.add_cog(cog)
-        logging.info(f"[OpenChat] Registered cog with qualified_name: {cog.qualified_name}")
+        logging.info(f"[Rocinante] Registered cog with qualified_name: {cog.qualified_name}")
         return cog
     except Exception as e:
-        logging.error(f"[OpenChat] Failed to register cog: {e}", exc_info=True)
+        logging.error(f"[Rocinante] Failed to register cog: {e}", exc_info=True)
         raise

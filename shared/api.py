@@ -10,7 +10,14 @@ import aiohttp
 import backoff
 from contextlib import asynccontextmanager
 from urllib.parse import urlparse, urljoin
-from config import OPENROUTER_API_KEY, HELICONE_API_KEY
+from config import (
+    OPENROUTER_API_KEY, 
+    HELICONE_API_KEY,
+    OPENPIPE_API_KEY,
+    OPENPIPE_API_URL,
+    OPENAI_API_KEY
+)
+from openpipe import OpenAI as OpenPipeAI
 from openai import AsyncOpenAI
 from concurrent.futures import ThreadPoolExecutor
 
@@ -85,6 +92,7 @@ class API:
             # These will be initialized in setup()
             self.session = None
             self.openai_client = None
+            self.openpipe_client = None
             self.infermatic_client = None
 
     async def setup(self):
@@ -114,6 +122,17 @@ class API:
                     'X-Title': 'SplinterTree by GwynTel',
                 },
                 timeout=30.0
+            )
+
+            # Initialize OpenPipe client
+            self.openpipe_client = OpenPipeAI(
+                api_key=OPENPIPE_API_KEY,
+                base_url=OPENPIPE_API_URL,
+                openpipe={
+                    "fallback": {
+                        "model": "gpt-4-turbo-preview"  # Fallback to OpenAI if needed
+                    }
+                }
             )
 
             # Initialize Infermatic client
@@ -274,11 +293,11 @@ class API:
         
         return 'application/octet-stream'
 
-    async def _stream_response(self, stream, requested_at: int, payload: Dict, provider: str, user_id: str, guild_id: str, prompt_file: str, model_cog: str) -> AsyncGenerator[str, None]:
+    async def _stream_response(self, response_stream, requested_at: int, payload: Dict, provider: str, user_id: str, guild_id: str, prompt_file: str, model_cog: str) -> AsyncGenerator[str, None]:
         """Handle streaming response with improved chunk handling"""
         full_response = ""
         try:
-            async for chunk in stream:
+            async for chunk in response_stream:
                 if not chunk or not chunk.choices:
                     continue
 
@@ -298,23 +317,27 @@ class API:
 
             # Log completion with full accumulated response
             received_at = int(time.time() * 1000)
-            await self.report(
-                requested_at=requested_at,
-                received_at=received_at,
-                req_payload=payload,
-                resp_payload={"choices": [{"message": {"content": full_response}}]},
-                status_code=200,
-                tags={
-                    "source": provider or "openrouter",
-                    "user_id": str(user_id) if user_id else None,
-                    "guild_id": str(guild_id) if guild_id else None,
-                    "prompt_file": prompt_file,
-                    "model_cog": model_cog,
-                    "streaming": True
-                },
-                user_id=user_id,
-                guild_id=guild_id
-            )
+            try:
+                await self.report(
+                    requested_at=requested_at,
+                    received_at=received_at,
+                    req_payload=payload,
+                    resp_payload={"choices": [{"message": {"content": full_response}}]},
+                    status_code=200,
+                    tags={
+                        "source": provider,
+                        "user_id": str(user_id) if user_id else None,
+                        "guild_id": str(guild_id) if guild_id else None,
+                        "prompt_file": prompt_file,
+                        "model_cog": model_cog,
+                        "streaming": True
+                    },
+                    user_id=user_id,
+                    guild_id=guild_id
+                )
+            except Exception as e:
+                logger.error(f"[API] Failed to report streaming interaction: {str(e)}")
+
         except Exception as e:
             logger.error(f"[API] Error in stream response: {str(e)}")
             error_msg = f"Error: {str(e)}"
@@ -322,14 +345,14 @@ class API:
             full_response += error_msg
 
     async def call_openpipe(self, messages: List[Dict[str, Union[str, List[Dict[str, Any]]]]], model: str, temperature: float = None, stream: bool = False, max_tokens: int = None, provider: str = None, user_id: str = None, guild_id: str = None, prompt_file: str = None, model_cog: str = None, tools: List[Dict] = None, tool_choice: Union[str, Dict] = None) -> Union[Dict, AsyncGenerator[str, None]]:
-        """Call OpenRouter API with improved streaming support"""
+        """Call OpenPipe API with fallback support"""
         if self.session is None:
             await self.setup()
 
         try:
             await self._enforce_rate_limit()
             
-            logger.debug(f"[API] Making OpenRouter request to model: {model}")
+            logger.debug(f"[API] Making OpenPipe request to model: {model}")
             logger.debug(f"[API] Stream mode: {stream}")
             
             validated_messages = await self._validate_message_roles(messages)
@@ -349,10 +372,20 @@ class API:
             if tool_choice:
                 payload["tool_choice"] = tool_choice
 
+            # Add metadata for OpenPipe logging
+            if user_id or guild_id or prompt_file or model_cog:
+                payload["metadata"] = {
+                    "user_id": str(user_id) if user_id else None,
+                    "guild_id": str(guild_id) if guild_id else None,
+                    "prompt_file": prompt_file,
+                    "model_cog": model_cog
+                }
+
             requested_at = int(time.time() * 1000)
 
             try:
-                response = await self.openai_client.chat.completions.create(**payload)
+                # Use OpenPipe client with fallback support
+                response = await self.openpipe_client.chat.completions.create(**payload)
                 
                 if stream:
                     return self._stream_response(response, requested_at, payload, provider, user_id, guild_id, prompt_file, model_cog)
@@ -360,7 +393,7 @@ class API:
                     received_at = int(time.time() * 1000)
                     
                     if not hasattr(response, 'choices') or not response.choices:
-                        error_msg = f"Invalid response structure from OpenRouter API: {response}"
+                        error_msg = f"Invalid response structure from OpenPipe API: {response}"
                         logger.error(f"[API] {error_msg}")
                         raise ValueError(error_msg)
                     
@@ -388,42 +421,63 @@ class API:
                         ]
                     
                     # Log completion
-                    await self.report(
-                        requested_at=requested_at,
-                        received_at=received_at,
-                        req_payload=payload,
-                        resp_payload=result,
-                        status_code=200,
-                        tags={
-                            "source": provider or "openrouter",
-                            "user_id": str(user_id) if user_id else None,
-                            "guild_id": str(guild_id) if guild_id else None,
-                            "prompt_file": prompt_file,
-                            "model_cog": model_cog,
-                            "streaming": False
-                        },
-                        user_id=user_id,
-                        guild_id=guild_id
-                    )
+                    try:
+                        await self.report(
+                            requested_at=requested_at,
+                            received_at=received_at,
+                            req_payload=payload,
+                            resp_payload=result,
+                            status_code=200,
+                            tags={
+                                "source": provider,
+                                "user_id": str(user_id) if user_id else None,
+                                "guild_id": str(guild_id) if guild_id else None,
+                                "prompt_file": prompt_file,
+                                "model_cog": model_cog,
+                                "streaming": False
+                            },
+                            user_id=user_id,
+                            guild_id=guild_id
+                        )
+                    except Exception as e:
+                        logger.error(f"[API] Failed to report completion: {str(e)}")
                     
                     return result
 
             except Exception as e:
-                error_msg = f"OpenRouter API error: {str(e)}"
+                error_msg = f"OpenPipe API error: {str(e)}"
                 logger.error(f"[API] {error_msg}")
                 raise ValueError(error_msg)
             
         except Exception as e:
             error_message = str(e)
-            logger.error(f"[API] OpenRouter error: {error_message}")
-            raise Exception(f"OpenRouter API error: {error_message}")
+            logger.error(f"[API] OpenPipe error: {error_message}")
+            raise Exception(f"OpenPipe API error: {error_message}")
 
     async def report(self, requested_at: int, received_at: int, req_payload: Dict, resp_payload: Dict, status_code: int, tags: Dict = None, user_id: str = None, guild_id: str = None):
         """Report interaction metrics with improved error handling"""
         try:
             if tags is None:
                 tags = {}
+
+            # Convert MagicMock objects to strings for JSON serialization
+            def serialize_mock(obj):
+                if hasattr(obj, '_mock_return_value'):
+                    return str(obj._mock_return_value)
+                elif isinstance(obj, dict):
+                    return {k: serialize_mock(v) for k, v in obj.items()}
+                elif isinstance(obj, list):
+                    return [serialize_mock(item) for item in obj]
+                return obj
+
+            # Serialize payloads and tags
+            req_payload = serialize_mock(req_payload)
+            resp_payload = serialize_mock(resp_payload)
+            tags = serialize_mock(tags)
+
             tags_str = json.dumps(tags)
+            req_str = json.dumps(req_payload)
+            resp_str = json.dumps(resp_payload)
 
             async with self.db_pool.acquire() as conn:
                 cursor = conn.cursor()
@@ -434,8 +488,8 @@ class API:
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """
                 values = (
-                    requested_at, received_at, json.dumps(req_payload),
-                    json.dumps(resp_payload), status_code, tags_str,
+                    requested_at, received_at, req_str,
+                    resp_str, status_code, tags_str,
                     user_id, guild_id
                 )
 

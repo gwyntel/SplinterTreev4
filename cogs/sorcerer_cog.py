@@ -11,8 +11,8 @@ class SorcererCog(BaseCog):
             name="Sorcerer",
             nickname="Sorcerer",
             trigger_words=['sorcerer', 'sorcererlm'],
-            model="raifle/sorcererlm-8x22b",
-            provider="openrouter",
+            model="openpipe:infermatic/rAIfle-SorcererLM-8x22b-bf16",
+            provider="openpipe",
             prompt_file="sorcerer_prompts",
             supports_vision=False
         )
@@ -89,7 +89,7 @@ class SorcererCog(BaseCog):
                 model=self.model,
                 temperature=temperature,
                 stream=True,
-                provider="openrouter",
+                provider="openpipe",
                 user_id=user_id,
                 guild_id=guild_id,
                 prompt_file="sorcerer_prompts"

@@ -4,34 +4,34 @@ import logging
 from .base_cog import BaseCog
 import json
 
-class GemmaCog(BaseCog):
+class WizardCog(BaseCog):
     def __init__(self, bot):
         super().__init__(
             bot=bot,
-            name="Gemma",
-            nickname="Gemma",
-            trigger_words=['gemma'],
-            model="google/gemma-2-9b-it",
-            provider="openrouter",
-            prompt_file="gemma_prompts",
+            name="Wizard",
+            nickname="Wizard",
+            trigger_words=['wizard', 'wizardlm'],
+            model="openpipe:infermatic/WizardLM-2-8x22B",
+            provider="openpipe",
+            prompt_file="wizard_prompts",
             supports_vision=False
         )
-        logging.debug(f"[Gemma] Initialized with raw_prompt: {self.raw_prompt}")
-        logging.debug(f"[Gemma] Using provider: {self.provider}")
-        logging.debug(f"[Gemma] Vision support: {self.supports_vision}")
+        logging.debug(f"[Wizard] Initialized with raw_prompt: {self.raw_prompt}")
+        logging.debug(f"[Wizard] Using provider: {self.provider}")
+        logging.debug(f"[Wizard] Vision support: {self.supports_vision}")
 
         # Load temperature settings
         try:
             with open('temperatures.json', 'r') as f:
                 self.temperatures = json.load(f)
         except Exception as e:
-            logging.error(f"[Gemma] Failed to load temperatures.json: {e}")
+            logging.error(f"[Wizard] Failed to load temperatures.json: {e}")
             self.temperatures = {}
 
     @property
     def qualified_name(self):
         """Override qualified_name to match the expected cog name"""
-        return "Gemma"
+        return "Wizard"
 
     def get_temperature(self):
         """Get temperature setting for this agent"""
@@ -72,12 +72,12 @@ class GemmaCog(BaseCog):
                 "content": message.content
             })
 
-            logging.debug(f"[Gemma] Sending {len(messages)} messages to API")
-            logging.debug(f"[Gemma] Formatted prompt: {formatted_prompt}")
+            logging.debug(f"[Wizard] Sending {len(messages)} messages to API")
+            logging.debug(f"[Wizard] Formatted prompt: {formatted_prompt}")
 
             # Get temperature for this agent
             temperature = self.get_temperature()
-            logging.debug(f"[Gemma] Using temperature: {temperature}")
+            logging.debug(f"[Wizard] Using temperature: {temperature}")
 
             # Get user_id and guild_id
             user_id = str(message.author.id)
@@ -89,23 +89,23 @@ class GemmaCog(BaseCog):
                 model=self.model,
                 temperature=temperature,
                 stream=True,
-                provider="openrouter",
+                provider="openpipe",
                 user_id=user_id,
                 guild_id=guild_id,
-                prompt_file="gemma_prompts"
+                prompt_file="wizard_prompts"
             )
 
             return response_stream
 
         except Exception as e:
-            logging.error(f"Error processing message for Gemma: {e}")
+            logging.error(f"Error processing message for Wizard: {e}")
             return None
 async def setup(bot):
     try:
-        cog = GemmaCog(bot)
+        cog = WizardCog(bot)
         await bot.add_cog(cog)
-        logging.info(f"[Gemma] Registered cog with qualified_name: {cog.qualified_name}")
+        logging.info(f"[Wizard] Registered cog with qualified_name: {cog.qualified_name}")
         return cog
     except Exception as e:
-        logging.error(f"[Gemma] Failed to register cog: {e}", exc_info=True)
+        logging.error(f"[Wizard] Failed to register cog: {e}", exc_info=True)
         raise

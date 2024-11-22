@@ -10,9 +10,9 @@ class MagnumCog(BaseCog):
             bot=bot,
             name="Magnum",
             nickname="Magnum",
-            trigger_words=['magnum'],
-            model="anthracite-org/magnum-v4-72b",
-            provider="openrouter",
+            trigger_words=['magnum', 'anthracite'],
+            model="openpipe:infermatic/anthracite-org-magnum-v4-72b-FP8-Dynamic",
+            provider="openpipe",
             prompt_file="magnum_prompts",
             supports_vision=False
         )
@@ -89,7 +89,7 @@ class MagnumCog(BaseCog):
                 model=self.model,
                 temperature=temperature,
                 stream=True,
-                provider="openrouter",
+                provider="openpipe",
                 user_id=user_id,
                 guild_id=guild_id,
                 prompt_file="magnum_prompts"

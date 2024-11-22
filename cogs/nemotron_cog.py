@@ -10,9 +10,9 @@ class NemotronCog(BaseCog):
             bot=bot,
             name="Nemotron",
             nickname="Nemotron",
-            trigger_words=['nemotron'],
-            model="nvidia/llama-3.1-nemotron-70b-instruct",
-            provider="openrouter",
+            trigger_words=['nemotron', 'nvidia'],
+            model="openpipe:infermatic/nvidia-Llama-3.1-Nemotron-70B-Instruct-HF",
+            provider="openpipe",
             prompt_file="nemotron_prompts",
             supports_vision=False
         )
@@ -89,7 +89,7 @@ class NemotronCog(BaseCog):
                 model=self.model,
                 temperature=temperature,
                 stream=True,
-                provider="openrouter",
+                provider="openpipe",
                 user_id=user_id,
                 guild_id=guild_id,
                 prompt_file="nemotron_prompts"

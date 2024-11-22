@@ -9,14 +9,13 @@ class GrokCog(BaseCog):
         super().__init__(
             bot=bot,
             name="Grok",
-            nickname="Grok Beta",
-            trigger_words=['grok', 'grokbeta', 'grok beta'],
-            model="x-ai/grok-beta",
-            provider="openrouter",
-            # prompt_file="grok_prompts",  # Uncomment and update if needed
-            supports_vision=True  
+            nickname="Grok",
+            trigger_words=['grok', 'xAI'],
+            model="openpipe:openrouter/x-ai/grok-beta",
+            provider="openpipe",
+            prompt_file="grok_prompts",
+            supports_vision=False
         )
-        self.vision_model = "x-ai/grok-vision-beta"  # Assign vision_model within the class
         logging.debug(f"[Grok] Initialized with raw_prompt: {self.raw_prompt}")
         logging.debug(f"[Grok] Using provider: {self.provider}")
         logging.debug(f"[Grok] Vision support: {self.supports_vision}")
@@ -37,7 +36,6 @@ class GrokCog(BaseCog):
     def get_temperature(self):
         """Get temperature setting for this agent"""
         return self.temperatures.get(self.name.lower(), 0.7)
-
     async def generate_response(self, message):
         """Generate a response using openrouter"""
         try:
@@ -68,49 +66,14 @@ class GrokCog(BaseCog):
                     "content": content
                 })
 
-            # Process current message and any images
-            content = []
-            has_images = False
-            
-            # Add any image attachments
-            for attachment in message.attachments:
-                if attachment.content_type and attachment.content_type.startswith("image/"):
-                    has_images = True
-                    content.append({
-                        "type": "image_url",
-                        "image_url": { "url": attachment.url }
-                    })
-
-            # Check for image URLs in embeds
-            for embed in message.embeds:
-                if embed.image and embed.image.url:
-                    has_images = True
-                    content.append({
-                        "type": "image_url",
-                        "image_url": { "url": embed.image.url }
-                    })
-                if embed.thumbnail and embed.thumbnail.url:
-                    has_images = True
-                    content.append({
-                        "type": "image_url",
-                        "image_url": { "url": embed.thumbnail.url }
-                    })
-
-            # Add the text content
-            content.append({
-                "type": "text",
-                "text": message.content
-            })
-
-            # Add the message with multimodal content
+            # Add the current message
             messages.append({
                 "role": "user",
-                "content": content
+                "content": message.content
             })
 
             logging.debug(f"[Grok] Sending {len(messages)} messages to API")
             logging.debug(f"[Grok] Formatted prompt: {formatted_prompt}")
-            logging.debug(f"[Grok] Has images: {has_images}")
 
             # Get temperature for this agent
             temperature = self.get_temperature()
@@ -120,19 +83,16 @@ class GrokCog(BaseCog):
             user_id = str(message.author.id)
             guild_id = str(message.guild.id) if message.guild else None
 
-            # Choose the model based on the presence of images
-            model = self.vision_model if has_images else self.model
-
             # Call API and return the stream directly
             response_stream = await self.api_client.call_openpipe(
                 messages=messages,
-                model=model,
+                model=self.model,
                 temperature=temperature,
                 stream=True,
-                provider="openrouter",
+                provider="openpipe",
                 user_id=user_id,
                 guild_id=guild_id,
-                # prompt_file=self.prompt_file  # Uncomment and update if needed
+                prompt_file="grok_prompts"
             )
 
             return response_stream
@@ -140,7 +100,6 @@ class GrokCog(BaseCog):
         except Exception as e:
             logging.error(f"Error processing message for Grok: {e}")
             return None
-
 async def setup(bot):
     try:
         cog = GrokCog(bot)

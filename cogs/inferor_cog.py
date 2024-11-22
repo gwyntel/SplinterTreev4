@@ -11,8 +11,8 @@ class InferorCog(BaseCog):
             name="Inferor",
             nickname="Inferor",
             trigger_words=['inferor'],
-            model="infermatic/mn-inferor-12b",
-            provider="openrouter",
+            model="openpipe:infermatic/Infermatic-MN-12B-Inferor-v0.0",
+            provider="openpipe",
             prompt_file="inferor_prompts",
             supports_vision=False
         )
@@ -89,7 +89,7 @@ class InferorCog(BaseCog):
                 model=self.model,
                 temperature=temperature,
                 stream=True,
-                provider="openrouter",
+                provider="openpipe",
                 user_id=user_id,
                 guild_id=guild_id,
                 prompt_file="inferor_prompts"

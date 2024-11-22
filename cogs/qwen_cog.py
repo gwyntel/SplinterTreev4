@@ -4,39 +4,38 @@ import logging
 from .base_cog import BaseCog
 import json
 
-class GeminiExpCog(BaseCog):
+class QwenCog(BaseCog):
     def __init__(self, bot):
         super().__init__(
             bot=bot,
-            name="GeminiExp",
-            nickname="GeminiExp",
-            trigger_words=['geminiexp'],
-            model="google/gemini-exp-1114",
-            provider="openrouter",
-            prompt_file="gemini_prompts",
-            supports_vision=True
+            name="Qwen",
+            nickname="Qwen",
+            trigger_words=['qwen', 'qwen2.5'],
+            model="openpipe:infermatic/Qwen2.5-72B-Instruct-Turbo",
+            provider="openpipe",
+            prompt_file="qwen_prompts",
+            supports_vision=False
         )
-        logging.debug(f"[GeminiExp] Initialized with raw_prompt: {self.raw_prompt}")
-        logging.debug(f"[GeminiExp] Using provider: {self.provider}")
-        logging.debug(f"[GeminiExp] Vision support: {self.supports_vision}")
+        logging.debug(f"[Qwen] Initialized with raw_prompt: {self.raw_prompt}")
+        logging.debug(f"[Qwen] Using provider: {self.provider}")
+        logging.debug(f"[Qwen] Vision support: {self.supports_vision}")
 
         # Load temperature settings
         try:
             with open('temperatures.json', 'r') as f:
                 self.temperatures = json.load(f)
         except Exception as e:
-            logging.error(f"[GeminiExp] Failed to load temperatures.json: {e}")
+            logging.error(f"[Qwen] Failed to load temperatures.json: {e}")
             self.temperatures = {}
 
     @property
     def qualified_name(self):
         """Override qualified_name to match the expected cog name"""
-        return "GeminiExp"
+        return "Qwen"
 
     def get_temperature(self):
         """Get temperature setting for this agent"""
         return self.temperatures.get(self.name.lower(), 0.7)
-
     async def generate_response(self, message):
         """Generate a response using openrouter"""
         try:
@@ -67,53 +66,18 @@ class GeminiExpCog(BaseCog):
                     "content": content
                 })
 
-            # Process current message and any images
-            content = []
-            has_images = False
-            
-            # Add any image attachments
-            for attachment in message.attachments:
-                if attachment.content_type and attachment.content_type.startswith("image/"):
-                    has_images = True
-                    content.append({
-                        "type": "image_url",
-                        "image_url": { "url": attachment.url }
-                    })
-
-            # Check for image URLs in embeds
-            for embed in message.embeds:
-                if embed.image and embed.image.url:
-                    has_images = True
-                    content.append({
-                        "type": "image_url",
-                        "image_url": { "url": embed.image.url }
-                    })
-                if embed.thumbnail and embed.thumbnail.url:
-                    has_images = True
-                    content.append({
-                        "type": "image_url",
-                        "image_url": { "url": embed.thumbnail.url }
-                    })
-
-            # Add the text content
-            content.append({
-                "type": "text",
-                "text": message.content
-            })
-
-            # Add the message with multimodal content
+            # Add the current message
             messages.append({
                 "role": "user",
-                "content": content
+                "content": message.content
             })
 
-            logging.debug(f"[GeminiExp] Sending {len(messages)} messages to API")
-            logging.debug(f"[GeminiExp] Formatted prompt: {formatted_prompt}")
-            logging.debug(f"[GeminiExp] Has images: {has_images}")
+            logging.debug(f"[Qwen] Sending {len(messages)} messages to API")
+            logging.debug(f"[Qwen] Formatted prompt: {formatted_prompt}")
 
             # Get temperature for this agent
             temperature = self.get_temperature()
-            logging.debug(f"[GeminiExp] Using temperature: {temperature}")
+            logging.debug(f"[Qwen] Using temperature: {temperature}")
 
             # Get user_id and guild_id
             user_id = str(message.author.id)
@@ -125,24 +89,23 @@ class GeminiExpCog(BaseCog):
                 model=self.model,
                 temperature=temperature,
                 stream=True,
-                provider="openrouter",
+                provider="openpipe",
                 user_id=user_id,
                 guild_id=guild_id,
-                prompt_file=self.prompt_file
+                prompt_file="qwen_prompts"
             )
 
             return response_stream
 
         except Exception as e:
-            logging.error(f"Error processing message for GeminiExp: {e}")
+            logging.error(f"Error processing message for Qwen: {e}")
             return None
-
 async def setup(bot):
     try:
-        cog = GeminiExpCog(bot)
+        cog = QwenCog(bot)
         await bot.add_cog(cog)
-        logging.info(f"[GeminiExp] Registered cog with qualified_name: {cog.qualified_name}")
+        logging.info(f"[Qwen] Registered cog with qualified_name: {cog.qualified_name}")
         return cog
     except Exception as e:
-        logging.error(f"[GeminiExp] Failed to register cog: {e}", exc_info=True)
+        logging.error(f"[Qwen] Failed to register cog: {e}", exc_info=True)
         raise
