@@ -297,23 +297,44 @@ class API:
         """Handle streaming response with improved chunk handling"""
         full_response = ""
         try:
-            async for chunk in response_stream:
-                if not chunk or not chunk.choices:
-                    continue
+            # Convert response_stream to async generator if it's not already
+            if hasattr(response_stream, '__aiter__'):
+                async for chunk in response_stream:
+                    if not chunk or not chunk.choices:
+                        continue
 
-                delta = chunk.choices[0].delta
-                if hasattr(delta, 'content') and delta.content:
-                    full_response += delta.content
-                    yield delta.content
-                elif hasattr(delta, 'tool_calls') and delta.tool_calls:
-                    tool_call = delta.tool_calls[0]
-                    if hasattr(tool_call, 'function'):
-                        tool_data = {
-                            'name': tool_call.function.name if hasattr(tool_call.function, 'name') else None,
-                            'arguments': tool_call.function.arguments if hasattr(tool_call.function, 'arguments') else None
-                        }
-                        yield json.dumps(tool_data)
-                        full_response += json.dumps(tool_data)
+                    delta = chunk.choices[0].delta
+                    if hasattr(delta, 'content') and delta.content:
+                        full_response += delta.content
+                        yield delta.content
+                    elif hasattr(delta, 'tool_calls') and delta.tool_calls:
+                        tool_call = delta.tool_calls[0]
+                        if hasattr(tool_call, 'function'):
+                            tool_data = {
+                                'name': tool_call.function.name if hasattr(tool_call.function, 'name') else None,
+                                'arguments': tool_call.function.arguments if hasattr(tool_call.function, 'arguments') else None
+                            }
+                            yield json.dumps(tool_data)
+                            full_response += json.dumps(tool_data)
+            else:
+                # Handle non-async stream
+                for chunk in response_stream:
+                    if not chunk or not chunk.choices:
+                        continue
+
+                    delta = chunk.choices[0].delta
+                    if hasattr(delta, 'content') and delta.content:
+                        full_response += delta.content
+                        yield delta.content
+                    elif hasattr(delta, 'tool_calls') and delta.tool_calls:
+                        tool_call = delta.tool_calls[0]
+                        if hasattr(tool_call, 'function'):
+                            tool_data = {
+                                'name': tool_call.function.name if hasattr(tool_call.function, 'name') else None,
+                                'arguments': tool_call.function.arguments if hasattr(tool_call.function, 'arguments') else None
+                            }
+                            yield json.dumps(tool_data)
+                            full_response += json.dumps(tool_data)
 
             # Log completion with full accumulated response
             received_at = int(time.time() * 1000)
@@ -325,12 +346,12 @@ class API:
                     resp_payload={"choices": [{"message": {"content": full_response}}]},
                     status_code=200,
                     tags={
-                        "source": provider,
-                        "user_id": str(user_id) if user_id else None,
-                        "guild_id": str(guild_id) if guild_id else None,
-                        "prompt_file": prompt_file,
-                        "model_cog": model_cog,
-                        "streaming": True
+                        "source": provider if provider else "",
+                        "user_id": str(user_id) if user_id else "",
+                        "guild_id": str(guild_id) if guild_id else "",
+                        "prompt_file": str(prompt_file) if prompt_file else "",
+                        "model_cog": str(model_cog) if model_cog else "",
+                        "streaming": "true"
                     },
                     user_id=user_id,
                     guild_id=guild_id
@@ -373,19 +394,24 @@ class API:
                 payload["tool_choice"] = tool_choice
 
             # Add metadata for OpenPipe logging
-            if user_id or guild_id or prompt_file or model_cog:
-                payload["metadata"] = {
-                    "user_id": str(user_id) if user_id else None,
-                    "guild_id": str(guild_id) if guild_id else None,
-                    "prompt_file": prompt_file,
-                    "model_cog": model_cog
-                }
+            metadata = {}
+            if user_id:
+                metadata["user_id"] = str(user_id)
+            if guild_id:
+                metadata["guild_id"] = str(guild_id)
+            if prompt_file:
+                metadata["prompt_file"] = str(prompt_file)
+            if model_cog:
+                metadata["model_cog"] = str(model_cog)
+
+            if metadata:
+                payload["metadata"] = metadata
 
             requested_at = int(time.time() * 1000)
 
             try:
                 # Use OpenPipe client with fallback support
-                response = await self.openpipe_client.chat.completions.create(**payload)
+                response = self.openpipe_client.chat.completions.create(**payload)
                 
                 if stream:
                     return self._stream_response(response, requested_at, payload, provider, user_id, guild_id, prompt_file, model_cog)
@@ -429,12 +455,12 @@ class API:
                             resp_payload=result,
                             status_code=200,
                             tags={
-                                "source": provider,
-                                "user_id": str(user_id) if user_id else None,
-                                "guild_id": str(guild_id) if guild_id else None,
-                                "prompt_file": prompt_file,
-                                "model_cog": model_cog,
-                                "streaming": False
+                                "source": provider if provider else "",
+                                "user_id": str(user_id) if user_id else "",
+                                "guild_id": str(guild_id) if guild_id else "",
+                                "prompt_file": str(prompt_file) if prompt_file else "",
+                                "model_cog": str(model_cog) if model_cog else "",
+                                "streaming": "false"
                             },
                             user_id=user_id,
                             guild_id=guild_id

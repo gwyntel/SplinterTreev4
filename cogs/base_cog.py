@@ -368,3 +368,22 @@ class BaseCog(commands.Cog):
             if message.id not in self.handled_messages:
                 self.handled_messages.add(message.id)
                 await self.handle_message(message)
+
+    async def cog_unload(self):
+        """Called when the cog is unloaded."""
+        try:
+            # Close any active sessions
+            if hasattr(self, 'api_client') and self.api_client:
+                await self.api_client.close()
+            logging.info(f"[{self.name}] Cog unloaded successfully")
+        except Exception as e:
+            logging.error(f"[{self.name}] Error during cog unload: {str(e)}")
+
+    async def cog_load(self):
+        """Called when the cog is loaded."""
+        try:
+            # Initialize any resources needed
+            logging.info(f"[{self.name}] Cog loaded successfully")
+        except Exception as e:
+            logging.error(f"[{self.name}] Error during cog load: {str(e)}")
+            raise

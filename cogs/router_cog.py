@@ -1,8 +1,11 @@
 import discord
 from discord.ext import commands
+import asyncio
 import logging
-from .base_cog import BaseCog
 import json
+from datetime import datetime, timezone
+from shared.api import api
+from .base_cog import BaseCog
 
 class RouterCog(BaseCog):
     def __init__(self, bot):
@@ -16,96 +19,136 @@ class RouterCog(BaseCog):
             prompt_file="router",
             supports_vision=False
         )
-        logging.debug(f"[Router] Initialized with raw_prompt: {self.raw_prompt}")
-        logging.debug(f"[Router] Using provider: {self.provider}")
-        logging.debug(f"[Router] Vision support: {self.supports_vision}")
+        self.db_path = 'databases/user_settings.db'
+        self.start_time = datetime.now(timezone.utc)
+        self.activated_channels = self._load_activated_channels()
+        # Load the system prompt
+        self.router_system_prompt = self._load_router_system_prompt()
+        # Start command syncing task
+        self.sync_task = None
 
-        # Load temperature settings
+    def _load_router_system_prompt(self):
+        """Load the router system prompt from a file or return the default."""
         try:
-            with open('temperatures.json', 'r') as f:
-                self.temperatures = json.load(f)
+            with open('router_system_prompt.txt', 'r') as f:
+                prompt = f.read()
+            return prompt
+        except FileNotFoundError:
+            logging.error("[Router] System prompt file not found.")
+            return ""
+
+    def _load_activated_channels(self) -> dict:
+        """Load activated channels from file"""
+        try:
+            with open('activated_channels.json', 'r') as f:
+                channels = json.load(f)
+                logging.info(f"[Router] Loaded activated channels: {channels}")
+                return channels
+        except FileNotFoundError:
+            logging.info("[Router] No activated channels file found, creating new one")
+            self._save_activated_channels({})
+            return {}
         except Exception as e:
-            logging.error(f"[Router] Failed to load temperatures.json: {e}")
-            self.temperatures = {}
+            logging.error(f"[Router] Error loading activated channels: {e}")
+            return {}
 
-    @property
-    def qualified_name(self):
-        """Override qualified_name to match the expected cog name"""
-        return "Router"
-
-    def get_temperature(self):
-        """Get temperature setting for this agent"""
-        return self.temperatures.get(self.name.lower(), 0.7)
-    async def generate_response(self, message):
-        """Generate a response using openrouter"""
+    def _save_activated_channels(self, channels: dict):
+        """Save activated channels to file"""
         try:
-            # Format system prompt
-            formatted_prompt = self.format_prompt(message)
-            messages = [{"role": "system", "content": formatted_prompt}]
+            with open('activated_channels.json', 'w') as f:
+                json.dump(channels, f)
+            logging.info(f"[Router] Saved activated channels: {channels}")
+        except Exception as e:
+            logging.error(f"[Router] Error saving activated channels: {e}")
 
-            # Get last 50 messages from database, excluding current message
+    async def handle_message(self, message):
+        """Route the message to the appropriate cog based on the model's decision."""
+        try:
             channel_id = str(message.channel.id)
-            history_messages = await self.context_cog.get_context_messages(
-                channel_id, 
-                limit=50,
-                exclude_message_id=str(message.id)
-            )
-            
-            # Format history messages with proper roles
-            for msg in history_messages:
-                role = "assistant" if msg['is_assistant'] else "user"
-                content = msg['content']
-                
-                # Handle system summaries
-                if msg['user_id'] == 'SYSTEM' and content.startswith('[SUMMARY]'):
-                    role = "system"
-                    content = content[9:].strip()  # Remove [SUMMARY] prefix
-                
-                messages.append({
-                    "role": role,
-                    "content": content
-                })
+            is_dm = isinstance(message.channel, discord.DMChannel)
 
-            # Add the current message
-            messages.append({
-                "role": "user",
-                "content": message.content
-            })
+            # Check if channel is activated
+            if is_dm:
+                if 'DM' not in self.activated_channels:
+                    logging.info("[Router] DM channel not activated.")
+                    return  # DM not activated
+                if channel_id not in self.activated_channels['DM']:
+                    logging.info("[Router] DM channel not activated.")
+                    return  # DM not activated
+            else:
+                guild_id = str(message.guild.id) if message.guild else None
+                if not guild_id or guild_id not in self.activated_channels or channel_id not in self.activated_channels[guild_id]:
+                    logging.info("[Router] Guild channel not activated.")
+                    return  # Channel not activated
 
-            logging.debug(f"[Router] Sending {len(messages)} messages to API")
-            logging.debug(f"[Router] Formatted prompt: {formatted_prompt}")
+            # Prepare the system prompt
+            system_prompt = self.router_system_prompt
 
-            # Get temperature for this agent
-            temperature = self.get_temperature()
-            logging.debug(f"[Router] Using temperature: {temperature}")
+            # Format the system prompt with the user message
+            formatted_prompt = system_prompt.replace("{user_message}", message.content).replace("{context}", "")  # Add context if available
 
-            # Get user_id and guild_id
-            user_id = str(message.author.id)
-            guild_id = str(message.guild.id) if message.guild else None
+            # Prepare messages for the model
+            messages = [
+                {"role": "system", "content": formatted_prompt},
+                {"role": "user", "content": message.content}
+            ]
 
-            # Call API and return the stream directly
-            response_stream = await self.api_client.call_openpipe(
-                messages=messages,
-                model=self.model,
-                temperature=temperature,
-                stream=True,
-                provider="openpipe",
-                user_id=user_id,
-                guild_id=guild_id,
-                prompt_file="router"
-            )
+            try:
+                # Start typing indicator
+                async with message.channel.typing():
+                    # Call the routing model with streaming enabled
+                    response_stream = await self.api_client.call_openpipe(
+                        messages=messages,
+                        model=self.model,
+                        temperature=self.get_temperature(),
+                        stream=True,
+                        user_id=str(message.author.id),
+                        guild_id=str(message.guild.id) if message.guild else None,
+                        prompt_file=self.prompt_file,
+                        model_cog=self.name
+                    )
 
-            return response_stream
+                    # Process the streaming response
+                    routing_response = ""
+                    async for chunk in response_stream:
+                        if chunk:
+                            routing_response += chunk
+
+                    # Clean up the response to get the cog name
+                    cog_name = routing_response.strip().split('\n')[0].strip()
+                    cog_name = ''.join(c for c in cog_name if c.isalnum())
+                    logging.info(f"[Router] Cleaned cog name: {cog_name}")
+
+                    # Attempt to get the cog
+                    cog_name = cog_name + "Cog"
+                    logging.info(f"[Router] Looking for cog: {cog_name}")
+                    cog = self.bot.get_cog(cog_name)
+                    
+                    if cog and hasattr(cog, 'handle_message'):
+                        logging.info(f"[Router] Found cog {cog_name}, forwarding message")
+                        # Forward the message to the cog
+                        await cog.handle_message(message)
+                    else:
+                        logging.error(f"[Router] Cog '{cog_name}' not found or 'handle_message' not implemented")
+                        await message.channel.send("❌ Unable to route message to the appropriate module.")
+
+            except ValueError as e:
+                # Handle specific API response structure errors
+                logging.error(f"[Router] API response structure error: {str(e)}")
+                await message.channel.send("❌ An error occurred while processing your message. The service may be temporarily unavailable.")
+            except Exception as e:
+                # Handle other API errors
+                logging.error(f"[Router] API error: {str(e)}")
+                await message.channel.send("❌ An error occurred while processing your message. Please try again later.")
 
         except Exception as e:
-            logging.error(f"Error processing message for Router: {e}")
-            return None
+            logging.error(f"[Router] Error routing message: {str(e)}")
+            await message.channel.send("❌ An error occurred while processing your message.")
+
+    async def cog_load(self):
+        """Called when the cog is loaded. Start command syncing."""
+        await super().cog_load()
+        logging.info("[Router] Cog loaded and commands synced successfully.")
+
 async def setup(bot):
-    try:
-        cog = RouterCog(bot)
-        await bot.add_cog(cog)
-        logging.info(f"[Router] Registered cog with qualified_name: {cog.qualified_name}")
-        return cog
-    except Exception as e:
-        logging.error(f"[Router] Failed to register cog: {e}", exc_info=True)
-        raise
+    await bot.add_cog(RouterCog(bot))
