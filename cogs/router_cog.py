@@ -36,6 +36,20 @@ class RouterCog(BaseCog):
             logging.error(f"[Router] Failed to load temperatures.json: {e}")
             self.temperatures = {}
 
+        # Map of model name variations to correct cog names
+        self.model_name_map = {
+            'gpt4o': 'GPT4O',
+            'gpt-4o': 'GPT4O',
+            'gpt4': 'GPT4O',
+            'gpt-4': 'GPT4O',
+            'claude3haiku': 'Claude3Haiku',
+            'claude3': 'Claude3Haiku',
+            'claude': 'Claude3Haiku',
+            'llamavision': 'LlamaVision',
+            'llama': 'LlamaVision',
+            'vision': 'LlamaVision'
+        }
+
     def get_temperature(self):
         """Get temperature setting for this agent"""
         return self.temperatures.get(self.name.lower(), 0.7)
@@ -95,6 +109,18 @@ class RouterCog(BaseCog):
             parts.append(f"{seconds} second{'s' if seconds != 1 else ''}")
             
         return ", ".join(parts)
+
+    def _normalize_model_name(self, name: str) -> str:
+        """Normalize model name to correct cog name format"""
+        # Remove non-alphanumeric characters and convert to lowercase
+        clean_name = ''.join(c for c in name if c.isalnum()).lower()
+        
+        # Check if we have a mapping for this name
+        if clean_name in self.model_name_map:
+            return self.model_name_map[clean_name]
+            
+        # If no mapping exists, capitalize first letter of each word
+        return ''.join(word.capitalize() for word in clean_name.split())
 
     def analyze_sentiment(self, text: str) -> tuple:
         """
@@ -239,8 +265,8 @@ class RouterCog(BaseCog):
 
                     # Clean up the response to get the cog name
                     cog_name = routing_response.strip().split('\n')[0].strip()
-                    cog_name = ''.join(c for c in cog_name if c.isalnum())
-                    logging.info(f"[Router] Cleaned cog name: {cog_name}")
+                    cog_name = self._normalize_model_name(cog_name)
+                    logging.info(f"[Router] Normalized cog name: {cog_name}")
 
                     # Attempt to get the cog
                     cog_name = cog_name + "Cog"

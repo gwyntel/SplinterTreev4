@@ -10,7 +10,7 @@ class Claude3HaikuCog(BaseCog):
             bot=bot,
             name="Claude-3-Haiku",
             nickname="Haiku",
-            trigger_words=['claude3haiku', 'haiku', 'claude 3 haiku'],
+            trigger_words=['claude3haiku', 'haiku', 'claude'],
             model="openpipe:openrouter/anthropic/claude-3-5-haiku:beta",
             provider="openpipe",
             prompt_file="claude_prompts",
