@@ -212,6 +212,17 @@ When setting custom system prompts, you can use these variables:
             logging.error(f"[Help] Error sending agent list: {str(e)}", exc_info=True)
             await ctx.send("An error occurred while fetching the agent list. Please try again later.")
 
+    @commands.hybrid_command(name="uptime", with_app_command=True)
+    async def uptime_command(self, ctx):
+        """Show how long the bot has been running. Use /uptime or !uptime"""
+        try:
+            uptime = get_uptime()
+            await ctx.send(f"🕒 Bot has been running for: {uptime}")
+            logging.info(f"[Help] Sent uptime to user {ctx.author.name}")
+        except Exception as e:
+            logging.error(f"[Help] Error sending uptime: {str(e)}", exc_info=True)
+            await ctx.send("An error occurred while fetching the uptime. Please try again later.")
+
     @commands.hybrid_command(name='hook')
     @discord.app_commands.describe(content="Message to send through webhooks")
     async def hook_command(self, ctx, *, content: str = None):
