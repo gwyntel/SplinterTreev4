@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch, mock_open
 from discord import DMChannel
 from cogs.router_cog import RouterCog
 
@@ -47,6 +47,25 @@ async def test_cog_check_guild_channel_without_permission():
     
     # Should not allow commands without manage_channels permission
     assert result is False
+
+def test_get_temperature_with_config():
+    bot = MagicMock()
+    temperatures_json = '{"router": 0.8}'
+    
+    with patch('builtins.open', mock_open(read_data=temperatures_json)):
+        cog = RouterCog(bot)
+        temperature = cog.get_temperature()
+        assert temperature == 0.8
+
+def test_get_temperature_without_config():
+    bot = MagicMock()
+    
+    # Mock open to raise FileNotFoundError for temperatures.json
+    with patch('builtins.open', side_effect=FileNotFoundError):
+        cog = RouterCog(bot)
+        temperature = cog.get_temperature()
+        # Should return default temperature
+        assert temperature == 0.7
 
 @pytest.mark.asyncio
 async def test_activate_guild_channel():
