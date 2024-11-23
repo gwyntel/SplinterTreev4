@@ -12,9 +12,12 @@ async def test_handle_message_routing_to_cog(mock_session):
     message.channel.id = 12345
     message.author.id = 67890
     message.guild = None
-    message.channel.typing = AsyncMock()
-    message.channel.typing.return_value.__aenter__ = AsyncMock()
-    message.channel.typing.return_value.__aexit__ = AsyncMock()
+    
+    # Create a proper async context manager for typing
+    typing_cm = AsyncMock()
+    typing_cm.__aenter__.return_value = None
+    typing_cm.__aexit__.return_value = None
+    message.channel.typing.return_value = typing_cm
     message.channel.send = AsyncMock()
 
     mock_api = AsyncMock()
@@ -27,13 +30,11 @@ async def test_handle_message_routing_to_cog(mock_session):
     cog.router_system_prompt = "System prompt: {user_message}"
     cog.activated_channels = {"DM": {"12345": True}}
 
-    # Ensure the API call is actually made within the handle_message method
-    with patch('cogs.router_cog.api.call_openpipe', return_value=mock_api.call_openpipe.return_value):
-        hermes_cog = MagicMock()
-        hermes_cog.handle_message = AsyncMock()
-        bot.get_cog.return_value = hermes_cog
+    hermes_cog = MagicMock()
+    hermes_cog.handle_message = AsyncMock()
+    bot.get_cog.return_value = hermes_cog
 
-        await cog.handle_message(message)
+    await cog.handle_message(message)
 
     mock_api.call_openpipe.assert_called_once()
     bot.get_cog.assert_called_with("GPT4OCog")
@@ -48,9 +49,12 @@ async def test_handle_message_cog_not_found(mock_session):
     message.channel.id = 12345
     message.author.id = 67890
     message.guild = None
-    message.channel.typing = AsyncMock()
-    message.channel.typing.return_value.__aenter__ = AsyncMock()
-    message.channel.typing.return_value.__aexit__ = AsyncMock()
+    
+    # Create a proper async context manager for typing
+    typing_cm = AsyncMock()
+    typing_cm.__aenter__.return_value = None
+    typing_cm.__aexit__.return_value = None
+    message.channel.typing.return_value = typing_cm
     message.channel.send = AsyncMock()
 
     mock_api = AsyncMock()
@@ -63,11 +67,9 @@ async def test_handle_message_cog_not_found(mock_session):
     cog.router_system_prompt = "System prompt: {user_message}"
     cog.activated_channels = {"DM": {"12345": True}}
 
-    # Ensure the API call is actually made within the handle_message method
-    with patch('cogs.router_cog.api.call_openpipe', return_value=mock_api.call_openpipe.return_value):
-        bot.get_cog.return_value = None
+    bot.get_cog.return_value = None
 
-        await cog.handle_message(message)
+    await cog.handle_message(message)
 
     mock_api.call_openpipe.assert_called_once()
     message.channel.send.assert_called_once_with("❌ Unable to route message to the appropriate module.")
@@ -81,9 +83,12 @@ async def test_handle_message_xml_response(mock_session):
     message.channel.id = 12345
     message.author.id = 67890
     message.guild = None
-    message.channel.typing = AsyncMock()
-    message.channel.typing.return_value.__aenter__ = AsyncMock()
-    message.channel.typing.return_value.__aexit__ = AsyncMock()
+    
+    # Create a proper async context manager for typing
+    typing_cm = AsyncMock()
+    typing_cm.__aenter__.return_value = None
+    typing_cm.__aexit__.return_value = None
+    message.channel.typing.return_value = typing_cm
     message.channel.send = AsyncMock()
 
     mock_api = AsyncMock()
@@ -96,13 +101,11 @@ async def test_handle_message_xml_response(mock_session):
     cog.router_system_prompt = "System prompt: {user_message}"
     cog.activated_channels = {"DM": {"12345": True}}
 
-    # Ensure the API call is actually made within the handle_message method
-    with patch('cogs.router_cog.api.call_openpipe', return_value=mock_api.call_openpipe.return_value):
-        hermes_cog = MagicMock()
-        hermes_cog.handle_message = AsyncMock()
-        bot.get_cog.return_value = hermes_cog
+    hermes_cog = MagicMock()
+    hermes_cog.handle_message = AsyncMock()
+    bot.get_cog.return_value = hermes_cog
 
-        await cog.handle_message(message)
+    await cog.handle_message(message)
 
     mock_api.call_openpipe.assert_called_once()
     bot.get_cog.assert_called_with("GPT4OCog")
