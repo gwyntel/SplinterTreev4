@@ -61,6 +61,52 @@ class RouterCog(BaseCog):
         except Exception as e:
             logging.error(f"[Router] Error saving activated channels: {e}")
 
+    @commands.hybrid_command(name="activate", description="Activate router in this channel")
+    @commands.has_permissions(manage_channels=True)
+    async def activate(self, ctx):
+        """Activate the router in the current channel"""
+        channel_id = str(ctx.channel.id)
+        
+        if isinstance(ctx.channel, discord.DMChannel):
+            if 'DM' not in self.activated_channels:
+                self.activated_channels['DM'] = {}
+            self.activated_channels['DM'][channel_id] = True
+            self._save_activated_channels(self.activated_channels)
+            await ctx.send("✅ Router activated in this DM channel")
+        else:
+            guild_id = str(ctx.guild.id)
+            if guild_id not in self.activated_channels:
+                self.activated_channels[guild_id] = {}
+            self.activated_channels[guild_id][channel_id] = True
+            self._save_activated_channels(self.activated_channels)
+            await ctx.send("✅ Router activated in this channel")
+
+    @commands.hybrid_command(name="deactivate", description="Deactivate router in this channel")
+    @commands.has_permissions(manage_channels=True)
+    async def deactivate(self, ctx):
+        """Deactivate the router in the current channel"""
+        channel_id = str(ctx.channel.id)
+        
+        if isinstance(ctx.channel, discord.DMChannel):
+            if 'DM' in self.activated_channels and channel_id in self.activated_channels['DM']:
+                del self.activated_channels['DM'][channel_id]
+                if not self.activated_channels['DM']:  # Remove DM dict if empty
+                    del self.activated_channels['DM']
+                self._save_activated_channels(self.activated_channels)
+                await ctx.send("✅ Router deactivated in this DM channel")
+            else:
+                await ctx.send("❌ Router is not activated in this DM channel")
+        else:
+            guild_id = str(ctx.guild.id)
+            if guild_id in self.activated_channels and channel_id in self.activated_channels[guild_id]:
+                del self.activated_channels[guild_id][channel_id]
+                if not self.activated_channels[guild_id]:  # Remove guild dict if empty
+                    del self.activated_channels[guild_id]
+                self._save_activated_channels(self.activated_channels)
+                await ctx.send("✅ Router deactivated in this channel")
+            else:
+                await ctx.send("❌ Router is not activated in this channel")
+
     async def handle_message(self, message):
         """Route the message to the appropriate cog based on the model's decision."""
         try:
