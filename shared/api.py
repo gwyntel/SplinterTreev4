@@ -296,7 +296,12 @@ class API:
     async def _stream_response(self, response_stream, requested_at: int, payload: Dict, provider: str, user_id: str, guild_id: str, prompt_file: str, model_cog: str) -> AsyncGenerator[str, None]:
         """Handle streaming response with improved chunk handling"""
         full_response = ""
+        citations = None  # Will be populated from the root response object
         try:
+            # Get citations from the root response object if available
+            if hasattr(response_stream, 'citations'):
+                citations = response_stream.citations
+
             # Convert response_stream to async generator if it's not already
             if hasattr(response_stream, '__aiter__'):
                 async for chunk in response_stream:
@@ -316,6 +321,15 @@ class API:
                             }
                             yield json.dumps(tool_data)
                             full_response += json.dumps(tool_data)
+
+                # After streaming content, append citations if present
+                if citations:
+                    citation_text = "\n\n**Sources:**"
+                    for i, citation in enumerate(citations, 1):
+                        citation_text += f"\n[{i}] {citation}"
+                    yield citation_text
+                    full_response += citation_text
+
             else:
                 # Handle non-async stream
                 for chunk in response_stream:
@@ -336,6 +350,14 @@ class API:
                             yield json.dumps(tool_data)
                             full_response += json.dumps(tool_data)
 
+                # After streaming content, append citations if present
+                if citations:
+                    citation_text = "\n\n**Sources:**"
+                    for i, citation in enumerate(citations, 1):
+                        citation_text += f"\n[{i}] {citation}"
+                    yield citation_text
+                    full_response += citation_text
+
             # Log completion with full accumulated response
             received_at = int(time.time() * 1000)
             try:
@@ -343,7 +365,7 @@ class API:
                     requested_at=requested_at,
                     received_at=received_at,
                     req_payload=payload,
-                    resp_payload={"choices": [{"message": {"content": full_response}}]},
+                    resp_payload={"choices": [{"message": {"content": full_response}}], "citations": citations},
                     status_code=200,
                     tags={
                         "source": provider if provider else "",
@@ -423,13 +445,23 @@ class API:
                         logger.error(f"[API] {error_msg}")
                         raise ValueError(error_msg)
                     
+                    content = response.choices[0].message.content
+                    citations = getattr(response, 'citations', None)
+                    
+                    # Add citations to content if present
+                    if citations:
+                        content += "\n\n**Sources:**"
+                        for i, citation in enumerate(citations, 1):
+                            content += f"\n[{i}] {citation}"
+                    
                     result = {
                         'choices': [{
                             'message': {
-                                'content': response.choices[0].message.content,
+                                'content': content,
                                 'role': 'assistant'
                             }
-                        }]
+                        }],
+                        'citations': citations
                     }
 
                     # Add tool calls if present

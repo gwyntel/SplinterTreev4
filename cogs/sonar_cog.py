@@ -84,33 +84,26 @@ class SonarCog(BaseCog):
             user_id = str(message.author.id)
             guild_id = str(message.guild.id) if message.guild else None
 
-            # Call API and get response
+            # Call API with stream=False to get citations
             response = await self.api_client.call_openpipe(
                 messages=messages,
                 model=self.model,
                 temperature=temperature,
-                stream=False,  # Set to False to get citations
+                stream=False,
                 provider="openpipe",
                 user_id=user_id,
                 guild_id=guild_id,
                 prompt_file="sonar_prompts"
             )
 
-            if response:
+            if response and 'choices' in response:
                 content = response['choices'][0]['message']['content']
-                citations = response.get('citations', [])
-
-                # Format citations if present
-                if citations:
-                    content += "\n\n**Sources:**"
-                    for i, citation in enumerate(citations, 1):
-                        content += f"\n[{i}] {citation}"
-
                 # Create async generator to yield content
                 async def response_generator():
                     yield content
-
                 return response_generator()
+
+            return None
 
         except Exception as e:
             logging.error(f"Error processing message for Sonar: {e}")
