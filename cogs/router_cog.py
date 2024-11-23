@@ -15,7 +15,7 @@ class RouterCog(BaseCog):
             name="Router",
             nickname="Router",
             trigger_words=[],
-            model="mistralai/ministral-8b",
+            model="openpipe:openrouter/mistralai/ministral-8b",
             provider="openpipe",
             prompt_file="router",
             supports_vision=False
@@ -123,22 +123,53 @@ class RouterCog(BaseCog):
             
         return ", ".join(parts)
 
+    def _extract_model_name(self, response: str) -> str:
+        """Extract model name from response with better error handling"""
+        try:
+            # Clean up the response
+            clean_response = response.strip().lower()
+            
+            # Remove common prefixes/suffixes that might be added
+            prefixes = ['i recommend', 'use', 'route to', 'the best model is', 'model:', 'cog:', 'using']
+            for prefix in prefixes:
+                if clean_response.startswith(prefix):
+                    clean_response = clean_response[len(prefix):].strip()
+            
+            # Get the first word/line as the model name
+            model_name = clean_response.split('\n')[0].split()[0].strip()
+            
+            # Remove any remaining punctuation
+            model_name = ''.join(c for c in model_name if c.isalnum() or c.isspace() or c == '-')
+            
+            logging.info(f"[Router] Extracted model name: {model_name} from response: {response}")
+            return model_name
+        except Exception as e:
+            logging.error(f"[Router] Error extracting model name: {str(e)}")
+            return 'gpt4o'  # Default to GPT4O on error
+
     def _normalize_model_name(self, name: str) -> str:
         """Normalize model name to correct cog name format"""
-        # Remove non-alphanumeric characters and convert to lowercase
-        clean_name = ''.join(c.lower() for c in name if c.isalnum() or c.isspace()).strip()
-        
-        # Check if we have a mapping for this name
-        if clean_name in self.model_name_map:
-            return self.model_name_map[clean_name]
+        try:
+            # Extract model name from potentially longer response
+            name = self._extract_model_name(name)
             
-        # If no mapping exists, try to find a partial match
-        for key, value in self.model_name_map.items():
-            if key in clean_name or clean_name in key:
-                return value
+            # Remove non-alphanumeric characters and convert to lowercase
+            clean_name = ''.join(c.lower() for c in name if c.isalnum() or c.isspace()).strip()
+            
+            # Check if we have a mapping for this name
+            if clean_name in self.model_name_map:
+                return self.model_name_map[clean_name]
                 
-        # Default to GPT4O if no match found
-        return 'GPT4O'
+            # If no mapping exists, try to find a partial match
+            for key, value in self.model_name_map.items():
+                if key in clean_name or clean_name in key:
+                    return value
+                    
+            # Default to GPT4O if no match found
+            return 'GPT4O'
+        except Exception as e:
+            logging.error(f"[Router] Error normalizing model name: {str(e)}")
+            return 'GPT4O'
 
     def analyze_sentiment(self, text: str) -> tuple:
         """
@@ -279,8 +310,7 @@ class RouterCog(BaseCog):
                             routing_response += chunk
 
                     # Clean up the response to get the cog name
-                    cog_name = routing_response.strip().split('\n')[0].strip()
-                    cog_name = self._normalize_model_name(cog_name)
+                    cog_name = self._normalize_model_name(routing_response)
                     logging.info(f"[Router] Raw response: {routing_response}")
                     logging.info(f"[Router] Normalized cog name: {cog_name}")
 
