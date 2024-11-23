@@ -54,6 +54,7 @@ class SplinterTreeBot(commands.Bot):
         self.current_status = None  # Track current custom status
         self.tree.on_error = self.on_app_command_error  # Set up error handler for slash commands
         self._cleanup_tasks = []
+        self.config = config  # Store config module for cogs to access
 
     async def close(self):
         """Cleanup when bot is shutting down"""

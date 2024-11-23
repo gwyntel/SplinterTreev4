@@ -1,7 +1,27 @@
 import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Discord bot token
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
+
+# Per-cog Discord tokens
+CLAUDE3HAIKU_TOKEN = os.getenv('CLAUDE3HAIKU_TOKEN')
+GPT4O_TOKEN = os.getenv('GPT4O_TOKEN')
+GROK_TOKEN = os.getenv('GROK_TOKEN')
+HERMES_TOKEN = os.getenv('HERMES_TOKEN')
+INFEROR_TOKEN = os.getenv('INFEROR_TOKEN')
+LLAMAVISION_TOKEN = os.getenv('LLAMAVISION_TOKEN')
+MAGNUM_TOKEN = os.getenv('MAGNUM_TOKEN')
+NEMOTRON_TOKEN = os.getenv('NEMOTRON_TOKEN')
+QWEN_TOKEN = os.getenv('QWEN_TOKEN')
+ROCINANTE_TOKEN = os.getenv('ROCINANTE_TOKEN')
+SONAR_TOKEN = os.getenv('SONAR_TOKEN')
+SYDNEY_TOKEN = os.getenv('SYDNEY_TOKEN')
+UNSLOP_TOKEN = os.getenv('UNSLOP_TOKEN')
+WIZARD_TOKEN = os.getenv('WIZARD_TOKEN')
 
 # OpenRouter API key
 OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY')

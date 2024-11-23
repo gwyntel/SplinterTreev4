@@ -10,7 +10,6 @@ from shared.utils import analyze_emotion, log_interaction
 import re
 import aiohttp
 import asyncio
-import tempfile
 import sqlite3
 from typing import Optional, Dict, AsyncGenerator
 from urllib.parse import urlparse
@@ -70,6 +69,28 @@ class BaseCog(commands.Cog):
             logging.error(f"[{name}] No API client found on bot")
             raise ValueError("Bot must have api_client attribute")
 
+        # Create individual Discord client for this cog if token exists
+        self.client = None
+        # Convert cog name to token variable name (e.g. "Claude-3-Haiku" -> "CLAUDE3HAIKU_TOKEN")
+        token_var = f"{self.name.upper().replace('-', '').replace(' ', '')}_TOKEN"
+        logging.info(f"[{name}] Looking for token variable: {token_var}")
+        
+        if hasattr(bot.config, token_var):
+            token = getattr(bot.config, token_var)
+            logging.info(f"[{name}] Found token: {token is not None}")
+            if token:
+                intents = discord.Intents.default()
+                intents.messages = True
+                intents.message_content = True
+                intents.dm_messages = True
+                intents.guilds = True
+                intents.members = True
+                self.client = discord.Client(intents=intents)
+                self.client.event(self.on_ready)
+                self.client.event(self.on_message)
+                asyncio.create_task(self.start_client(token))
+                logging.info(f"[{name}] Created individual Discord client")
+
         # Default system prompt template
         self.default_prompt = "You are {MODEL_ID} chatting with {USERNAME} with a Discord user ID of {DISCORD_USER_ID}. It's {TIME} in {TZ}. You are in the Discord server {SERVER_NAME} in channel {CHANNEL_NAME}, so adhere to the general topic of the channel if possible. GwynTel on Discord created your bot, and Moth is a valued mentor. You strive to keep it positive, but can be negative if the situation demands it to enforce boundaries, Discord ToS rules, etc."
 
@@ -85,6 +106,49 @@ class BaseCog(commands.Cog):
         except Exception as e:
             logging.warning(f"Failed to load prompt for {self.name}, using default: {str(e)}")
             self.raw_prompt = self.default_prompt
+
+    async def start_client(self, token):
+        """Start the individual Discord client for this cog"""
+        if self.client:
+            try:
+                logging.info(f"[{self.name}] Starting individual Discord client...")
+                await self.client.start(token)
+                logging.info(f"[{self.name}] Started individual Discord client")
+            except Exception as e:
+                logging.error(f"[{self.name}] Failed to start Discord client: {e}")
+                self.client = None
+
+    async def on_ready(self):
+        """Called when the individual client is ready"""
+        if self.client:
+            try:
+                # Set status to away
+                await self.client.change_presence(status=discord.Status.idle)
+                # Set nickname to model name in all guilds
+                for guild in self.client.guilds:
+                    try:
+                        await guild.me.edit(nick=self.nickname)
+                    except:
+                        pass
+                logging.info(f"[{self.name}] Individual client ready and set to away status")
+            except Exception as e:
+                logging.error(f"[{self.name}] Error in on_ready: {e}")
+
+    async def on_message(self, message):
+        """Handle messages for individual client"""
+        if message.author == self.client.user:
+            return
+
+        # Handle DM messages
+        if isinstance(message.channel, discord.DMChannel):
+            logging.info(f"[{self.name}] Received DM from {message.author.name}: {message.content}")
+            await self.handle_message(message)
+            return
+
+        # Handle mentions in servers
+        if self.client.user in message.mentions:
+            logging.info(f"[{self.name}] Mentioned in {message.guild.name} by {message.author.name}: {message.content}")
+            await self.handle_message(message)
 
     async def is_user_banned(self, user_id: str) -> bool:
         """Check if a user is banned from bot interactions"""
@@ -372,6 +436,10 @@ class BaseCog(commands.Cog):
     async def cog_unload(self):
         """Called when the cog is unloaded."""
         try:
+            # Close individual client if it exists
+            if self.client:
+                await self.client.close()
+                
             # Close any active sessions
             if hasattr(self, 'api_client') and self.api_client:
                 await self.api_client.close()
