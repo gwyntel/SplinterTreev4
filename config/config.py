@@ -9,6 +9,7 @@ DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
 
 # Per-cog Discord tokens
 CLAUDE3HAIKU_TOKEN = os.getenv('CLAUDE3HAIKU_TOKEN')
+DEEPSEEK_TOKEN = os.getenv('DEEPSEEK_TOKEN')
 GPT4O_TOKEN = os.getenv('GPT4O_TOKEN')
 GROK_TOKEN = os.getenv('GROK_TOKEN')
 HERMES_TOKEN = os.getenv('HERMES_TOKEN')
