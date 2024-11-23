@@ -1,0 +1,8 @@
+{
+    "max_context_length": 2000,
+    "max_history_messages": 10,
+    "context_window_minutes": 30,
+    "include_system_messages": false,
+    "include_bot_messages": true,
+    "include_user_messages": true
+}

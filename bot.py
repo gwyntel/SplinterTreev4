@@ -53,6 +53,43 @@ class SplinterTreeBot(commands.Bot):
         self.last_status_check = 0  # Track last status check time
         self.current_status = None  # Track current custom status
         self.tree.on_error = self.on_app_command_error  # Set up error handler for slash commands
+        self._cleanup_tasks = []
+
+    async def close(self):
+        """Cleanup when bot is shutting down"""
+        logging.info("Bot is shutting down, cleaning up resources...")
+        
+        # Cancel all cleanup tasks
+        for task in self._cleanup_tasks:
+            if not task.done():
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+
+        # Stop the status update task if it's running
+        if update_status.is_running():
+            update_status.cancel()
+
+        # Unload all cogs
+        for extension in list(self.extensions.keys()):
+            try:
+                await self.unload_extension(extension)
+                logging.info(f"Unloaded extension: {extension}")
+            except Exception as e:
+                logging.error(f"Error unloading extension {extension}: {e}")
+
+        # Close API client and cleanup resources
+        try:
+            await self.api_client.close()
+            logging.info("Closed API client")
+        except Exception as e:
+            logging.error(f"Error closing API client: {e}")
+
+        # Call parent's close method
+        await super().close()
+        logging.info("Bot shutdown complete")
 
     async def process_commands(self, message):
         ctx = await self.get_context(message)
@@ -241,34 +278,6 @@ def save_processed_messages():
     except Exception as e:
         logging.error(f"Error saving processed messages: {str(e)}")
 
-def get_history_file(channel_id: str) -> str:
-    """Get the history file path for a channel"""
-    history_dir = os.path.join(BOT_DIR, 'history')
-    if not os.path.exists(history_dir):
-        os.makedirs(history_dir)
-    return os.path.join(history_dir, f'history_{channel_id}.json')
-
-def get_uptime():
-    """Get bot uptime as a formatted string"""
-    if bot.start_time is None:
-        return "Unknown"
-    pst = pytz.timezone('US/Pacific')
-    current_time = datetime.now(pst)
-    uptime = current_time - bot.start_time.astimezone(pst)
-    days = uptime.days
-    hours, remainder = divmod(uptime.seconds, 3600)
-    minutes, seconds = divmod(remainder, 60)
-    parts = []
-    if days > 0:
-        parts.append(f"{days}d")
-    if hours > 0:
-        parts.append(f"{hours}h")
-    if minutes > 0:
-        parts.append(f"{minutes}m")
-    if seconds > 0 or not parts:
-        parts.append(f"{seconds}s")
-    return " ".join(parts)
-
 @tasks.loop(seconds=30)
 async def update_status():
     """Update bot status"""
@@ -278,7 +287,8 @@ async def update_status():
         
         # If no custom status and uptime is enabled, show uptime
         if not bot.current_status and bot.get_uptime_enabled():
-            await bot.change_presence(activity=discord.Game(name=f"Up for {get_uptime()}"))
+            uptime = get_uptime()
+            await bot.change_presence(activity=discord.Game(name=f"Up for {uptime}"))
         elif bot.current_status:
             # Ensure custom status stays set
             await bot.change_presence(activity=discord.Game(name=bot.current_status))
@@ -304,42 +314,26 @@ async def on_ready():
     if not update_status.is_running():
         update_status.start()
 
-async def resolve_user_id(user_id):
-    """Resolve a user ID to a username"""
-    try:
-        user = await bot.fetch_user(user_id)
-        return user.name if user else str(user_id)
-    except Exception as e:
-        logging.error(f"Error resolving user ID {user_id}: {e}")
-        return str(user_id)
-
-async def process_attachment(attachment):
-    """Process a single attachment and return its content"""
-    try:
-        if attachment.filename.endswith(('.txt', '.md')):
-            content = await attachment.read()
-            return content.decode('utf-8')
-        elif attachment.content_type and attachment.content_type.startswith('image/'):
-            return f"[Image: {attachment.filename}]"
-        else:
-            return f"[Attachment: {attachment.filename}]"
-    except Exception as e:
-        logging.error(f"Error processing attachment {attachment.filename}: {e}")
-        return f"[Attachment: {attachment.filename}]"
-
-def get_cog_by_name(name):
-    """Get a cog by name or class name"""
-    for cog in bot.cogs.values():
-        if (hasattr(cog, 'name') and cog.name.lower() == name.lower()) or \
-           cog.__class__.__name__.lower() == f"{name.lower()}cog":
-            return cog
-    return None
-
-def get_model_from_message(content):
-    """Extract model name from message content"""
-    if content.startswith('[') and ']' in content:
-        return content[1:content.index(']')]
-    return None
+def get_uptime():
+    """Get bot uptime as a formatted string"""
+    if bot.start_time is None:
+        return "Unknown"
+    pst = pytz.timezone('US/Pacific')
+    current_time = datetime.now(pst)
+    uptime = current_time - bot.start_time.astimezone(pst)
+    days = uptime.days
+    hours, remainder = divmod(uptime.seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    parts = []
+    if days > 0:
+        parts.append(f"{days}d")
+    if hours > 0:
+        parts.append(f"{hours}h")
+    if minutes > 0:
+        parts.append(f"{minutes}m")
+    if seconds > 0 or not parts:
+        parts.append(f"{seconds}s")
+    return " ".join(parts)
 
 @bot.event
 async def on_message(message):
@@ -353,34 +347,6 @@ async def on_message(message):
     # Update last interaction
     bot.last_interaction['user'] = message.author.display_name
     bot.last_interaction['time'] = datetime.now(pytz.timezone('US/Pacific'))
-
-    # Process attachments
-    attachment_contents = []
-    for attachment in message.attachments:
-        attachment_content = await process_attachment(attachment)
-        attachment_contents.append(attachment_content)
-
-    # Combine message content and attachment contents
-    full_content = message.content
-    if attachment_contents:
-        full_content += "\n" + "\n".join(attachment_contents)
-
-    # Check if message is a reply to a bot message
-    if message.reference and message.reference.message_id:
-        try:
-            replied_msg = await message.channel.fetch_message(message.reference.message_id)
-            if replied_msg.author == bot.user:
-                # Extract model name from the replied message
-                model_name = get_model_from_message(replied_msg.content)
-                if model_name:
-                    # Get corresponding cog
-                    cog = get_cog_by_name(model_name)
-                    if cog and hasattr(cog, 'handle_message'):
-                        logging.debug(f"Using {model_name} cog to handle reply")
-                        await cog.handle_message(message, full_content)
-                        return
-        except Exception as e:
-            logging.error(f"Error handling reply: {str(e)}")
 
     # Get the router cog and handle the message
     router_cog = bot.get_cog('RouterCog')
@@ -405,4 +371,28 @@ async def on_command_error(ctx, error):
 if __name__ == "__main__":
     logging.debug("Starting bot...")
     load_processed_messages()  # Load processed messages on startup
-    bot.run(config.DISCORD_TOKEN)
+    
+    async def run_bot():
+        try:
+            async with bot:
+                await bot.start(config.DISCORD_TOKEN)
+        except KeyboardInterrupt:
+            logging.info("Received keyboard interrupt, initiating shutdown...")
+            await bot.close()
+        except Exception as e:
+            logging.error(f"Bot crashed: {e}")
+            logging.error(traceback.format_exc())
+            await bot.close()
+        finally:
+            # Ensure everything is cleaned up
+            if not bot.is_closed():
+                await bot.close()
+
+    # Run the bot with proper asyncio handling
+    try:
+        asyncio.run(run_bot())
+    except KeyboardInterrupt:
+        logging.info("Received keyboard interrupt during startup")
+    except Exception as e:
+        logging.error(f"Fatal error: {e}")
+        logging.error(traceback.format_exc())

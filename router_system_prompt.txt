@@ -14,7 +14,7 @@ Context: "{context}"
 # CRITICAL SYSTEMS - Requires near certainty
 route_confidence = {
     # Crisis Support - Maximum confidence required
-    'Hermes':       0.95,    # Mental health & crisis support, advanced agentic capabilities
+    'Hermes':       0.93,    # Mental health & crisis support, advanced agentic capabilities
     
     # Vision Processing - Maximum confidence required
     'LlamaVision':  0.95,    # Image analysis and description
@@ -102,11 +102,66 @@ def calculate_confidence(message, context):
 
 [PATTERN DETECTION]
 
-# Crisis & Support Patterns
+# Crisis & Support Patterns - Expanded for deeper detection
 crisis_indicators = [
+    # Direct Crisis Terms
     'emergency', 'help', 'crisis', 'urgent', 'suicide',
     'panic', 'anxiety', 'depression', 'harm', 'mental health',
-    'therapy', 'counseling', 'support', 'stressed', 'worried'
+    'therapy', 'counseling', 'support', 'stressed', 'worried',
+    
+    # Subtle Emotional States
+    'drained', 'numb', 'exhausted', 'disconnected', 'void',
+    'adrift', 'shattered', 'empty', 'hollow', 'lost',
+    'alone', 'trapped', 'stuck', 'tired of everything',
+    'fading', 'disappearing', 'invisible', 'unreal',
+    
+    # Metaphorical Pain
+    'drowning', 'suffocating', 'crushing', 'burning',
+    'falling', 'sinking', 'spiraling', 'unraveling',
+    'breaking', 'crumbling', 'collapsing', 'dissolving',
+    
+    # Idiomatic Distress
+    'at the end of my rope', 'in over my head',
+    'falling apart', 'losing grip', 'can\'t take it anymore',
+    'walls closing in', 'weight of the world',
+    'everything is too much', 'no way out',
+    'point of no return', 'darkness closing in',
+    
+    # Life Circumstances
+    'financial ruin', 'relationship breakdown', 'job loss',
+    'eviction', 'legal trouble', 'medical issues',
+    'debt', 'divorce', 'betrayal', 'abandonment',
+    'rejection', 'failure', 'mistake', 'regret',
+    
+    # Self-Perception
+    'worthless', 'useless', 'burden', 'mistake',
+    'broken', 'damaged', 'unfixable', 'beyond help',
+    'unlovable', 'unwanted', 'unnecessary', 'pointless',
+    
+    # Behavioral Indicators
+    'can\'t sleep', 'not eating', 'avoiding everyone',
+    'isolating', 'withdrawing', 'giving up', 'letting go',
+    'saying goodbye', 'making plans', 'putting affairs in order',
+    
+    # Time-Related Distress
+    'no future', 'no hope', 'never ending', 'eternal',
+    'forever', 'permanent', 'always like this',
+    'won\'t get better', 'too late', 'running out of time',
+    
+    # Relationship Distress
+    'nobody understands', 'nobody cares', 'all alone',
+    'abandoned', 'rejected', 'unloved', 'unwanted',
+    'burden to others', 'better off without me',
+    
+    # Existential Crisis
+    'meaningless', 'pointless', 'why bother',
+    'what\'s the point', 'no purpose', 'empty',
+    'void', 'nothingness', 'existence', 'reality',
+    
+    # Physical Manifestations
+    'chest pain', 'can\'t breathe', 'heart racing',
+    'shaking', 'dizzy', 'nauseous', 'sick',
+    'exhausted', 'tired', 'no energy'
 ]
 
 # Vision Patterns

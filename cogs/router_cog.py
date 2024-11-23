@@ -3,7 +3,8 @@ from discord.ext import commands
 import asyncio
 import logging
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+from textblob import TextBlob
 from shared.api import api
 from .base_cog import BaseCog
 
@@ -73,6 +74,42 @@ class RouterCog(BaseCog):
         except Exception as e:
             logging.error(f"[Router] Error saving activated channels: {e}")
 
+    def _get_uptime(self) -> str:
+        """Calculate and format the bot's uptime"""
+        now = datetime.now(timezone.utc)
+        delta = now - self.start_time
+        
+        days = delta.days
+        hours = delta.seconds // 3600
+        minutes = (delta.seconds % 3600) // 60
+        seconds = delta.seconds % 60
+        
+        parts = []
+        if days > 0:
+            parts.append(f"{days} day{'s' if days != 1 else ''}")
+        if hours > 0:
+            parts.append(f"{hours} hour{'s' if hours != 1 else ''}")
+        if minutes > 0:
+            parts.append(f"{minutes} minute{'s' if minutes != 1 else ''}")
+        if seconds > 0 or not parts:
+            parts.append(f"{seconds} second{'s' if seconds != 1 else ''}")
+            
+        return ", ".join(parts)
+
+    def analyze_sentiment(self, text: str) -> tuple:
+        """
+        Analyze the sentiment of a message using TextBlob.
+        Returns (polarity, subjectivity) where:
+        - polarity is between -1 (negative) and 1 (positive)
+        - subjectivity is between 0 (objective) and 1 (subjective)
+        """
+        try:
+            analysis = TextBlob(text)
+            return analysis.sentiment.polarity, analysis.sentiment.subjectivity
+        except Exception as e:
+            logging.error(f"[Router] Error analyzing sentiment: {str(e)}")
+            return 0.0, 0.0
+
     async def cog_check(self, ctx):
         """Check if user has permission to use commands in this context"""
         # Allow all commands in DM channels
@@ -80,6 +117,12 @@ class RouterCog(BaseCog):
             return True
         # Require manage_channels permission in guild channels
         return ctx.author.guild_permissions.manage_channels
+
+    @commands.hybrid_command(name="uptime", description="Display bot's uptime")
+    async def uptime(self, ctx):
+        """Display how long the bot has been running"""
+        uptime_str = self._get_uptime()
+        await ctx.send(f"🕒 Bot has been running for: {uptime_str}")
 
     @commands.hybrid_command(name="activate", description="Activate router in this channel")
     async def activate(self, ctx):
@@ -145,11 +188,24 @@ class RouterCog(BaseCog):
                     logging.info("[Router] Guild channel not activated.")
                     return  # Channel not activated
 
+            # Analyze message sentiment
+            polarity, subjectivity = self.analyze_sentiment(message.content)
+            logging.info(f"[Router] Message sentiment - Polarity: {polarity}, Subjectivity: {subjectivity}")
+
+            # Route to Hermes if sentiment is very negative (polarity < -0.5)
+            if polarity < -0.5 and subjectivity > 0.5:
+                logging.info("[Router] Routing to Hermes due to negative sentiment")
+                cog = self.bot.get_cog("HermesCog")
+                if cog and hasattr(cog, 'handle_message'):
+                    await cog.handle_message(message)
+                    return
+
             # Prepare the system prompt
             system_prompt = self.router_system_prompt
 
-            # Format the system prompt with the user message
-            formatted_prompt = system_prompt.replace("{user_message}", message.content).replace("{context}", "")  # Add context if available
+            # Format the system prompt with the user message and sentiment
+            context = f"Sentiment Analysis - Polarity: {polarity}, Subjectivity: {subjectivity}"
+            formatted_prompt = system_prompt.replace("{user_message}", message.content).replace("{context}", context)
 
             # Prepare messages for the model
             messages = [
@@ -177,6 +233,9 @@ class RouterCog(BaseCog):
                     async for chunk in response_stream:
                         if chunk:
                             routing_response += chunk
+
+                    # Debugging: Log the raw routing response
+                    logging.debug(f"[Router] Raw routing response: {routing_response}")
 
                     # Clean up the response to get the cog name
                     cog_name = routing_response.strip().split('\n')[0].strip()
