@@ -61,7 +61,9 @@ class RouterCog(BaseCog):
             'nemotron': 'Nemotron',
             'magnum': 'Magnum',
             'inferor': 'Inferor',
-            'sydney': 'Sydney'
+            'sydney': 'SYDNEY-COURT',
+            'sydney-court': 'SYDNEY-COURT',
+            'sydneycourt': 'SYDNEY-COURT'
         }
 
     def get_temperature(self):
@@ -165,7 +167,7 @@ class RouterCog(BaseCog):
             name = self._extract_model_name(name)
             
             # Remove non-alphanumeric characters and convert to lowercase
-            clean_name = ''.join(c.lower() for c in name if c.isalnum() or c.isspace()).strip()
+            clean_name = ''.join(c.lower() for c in name if c.isalnum() or c.isspace() or c == '-').strip()
             
             # Check if we have a mapping for this name
             if clean_name in self.model_name_map:
@@ -282,6 +284,13 @@ class RouterCog(BaseCog):
             if polarity < -0.5 and subjectivity > 0.5:
                 logging.info("[Router] Routing to Hermes due to negative sentiment")
                 cog = self.bot.get_cog("HermesCog")
+                if cog and hasattr(cog, 'handle_message'):
+                    await cog.handle_message(message)
+                    return
+            # Route to Sydney for moderately negative sentiment (emotional support)
+            elif polarity < -0.2 and subjectivity > 0.3:
+                logging.info("[Router] Routing to Sydney due to moderate negative sentiment")
+                cog = self.bot.get_cog("SYDNEY-COURTCog")
                 if cog and hasattr(cog, 'handle_message'):
                     await cog.handle_message(message)
                     return

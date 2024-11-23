@@ -15,6 +15,7 @@ Context: "{context}"
 route_confidence = {
     # Crisis Support - Maximum confidence required
     'Hermes':       0.93,    # Mental health & crisis support, advanced agentic capabilities
+    'SYDNEY-COURT': 0.88,    # Secondary emotional support for non-crisis situations
     
     # Vision Processing - Maximum confidence required
     'LlamaVision':  0.95,    # Image analysis and description
@@ -55,6 +56,9 @@ def calculate_confidence(message, context):
     # Priority Checks (Override Default)
     if crisis_detected(message):
         return score_route('Hermes', message)
+        
+    if emotional_support_needed(message):
+        return score_route('SYDNEY-COURT', message)
         
     if contains_image(message):
         return score_route('LlamaVision', message)
@@ -164,6 +168,29 @@ crisis_indicators = [
     'exhausted', 'tired', 'no energy'
 ]
 
+# Emotional Support Patterns - For Sydney-Court
+emotional_support_indicators = [
+    # Mild Emotional States
+    'feeling down', 'sad', 'upset', 'frustrated',
+    'overwhelmed', 'confused', 'uncertain', 'insecure',
+    
+    # Daily Struggles
+    'bad day', 'tough time', 'difficult situation',
+    'need advice', 'not sure what to do', 'feeling stuck',
+    
+    # Relationship Issues
+    'relationship problems', 'friend trouble',
+    'family issues', 'work relationships',
+    
+    # Personal Growth
+    'self-improvement', 'personal development',
+    'feeling lost', 'need direction',
+    
+    # General Support
+    'need someone to talk to', 'want to chat',
+    'could use support', 'need perspective'
+]
+
 # Vision Patterns
 vision_indicators = [
     'image', 'picture', 'photo', 'screenshot', 'diagram',
@@ -207,7 +234,7 @@ def get_route(message: str, context: str = None) -> str:
     
     # Validation
     assert model in [
-        'GPT4o', 'Grok', 'Hermes', 'Sonar', 'Wizard',
+        'GPT4o', 'Grok', 'Hermes', 'SYDNEY-COURT', 'Sonar', 'Wizard',
         'Unslop', 'Rocinante', 'Sorcerer', 'Qwen',
         'Nemotron', 'Inferor', 'Magnum', 'LlamaVision',
         'Router'

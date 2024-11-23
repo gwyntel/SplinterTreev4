@@ -15,7 +15,7 @@ async def test_generate_response():
 async def test_qualified_name():
     bot = MagicMock()
     cog = SydneyCog(bot)
-    assert cog.qualified_name == "Sydney"
+    assert cog.qualified_name == "SYDNEY-COURT"
 
 @pytest.mark.asyncio
 async def test_get_temperature():

@@ -8,30 +8,30 @@ class SydneyCog(BaseCog):
     def __init__(self, bot):
         super().__init__(
             bot=bot,
-            name="Sydney",
+            name="SYDNEY-COURT",
             nickname="Sydney",
-            trigger_words=['syd', 'sydney'],
-            model="meta-llama/llama-3.1-405b-instruct",
-            provider="openrouter",
+            trigger_words=['sydney', 'court'],
+            model="openpipe:Sydney-Court",
+            provider="openpipe",
             prompt_file="sydney_prompts",
             supports_vision=False
         )
-        logging.debug(f"[Sydney] Initialized with raw_prompt: {self.raw_prompt}")
-        logging.debug(f"[Sydney] Using provider: {self.provider}")
-        logging.debug(f"[Sydney] Vision support: {self.supports_vision}")
+        logging.debug(f"[SYDNEY-COURT] Initialized with raw_prompt: {self.raw_prompt}")
+        logging.debug(f"[SYDNEY-COURT] Using provider: {self.provider}")
+        logging.debug(f"[SYDNEY-COURT] Vision support: {self.supports_vision}")
 
         # Load temperature settings
         try:
             with open('temperatures.json', 'r') as f:
                 self.temperatures = json.load(f)
         except Exception as e:
-            logging.error(f"[Sydney] Failed to load temperatures.json: {e}")
+            logging.error(f"[SYDNEY-COURT] Failed to load temperatures.json: {e}")
             self.temperatures = {}
 
     @property
     def qualified_name(self):
         """Override qualified_name to match the expected cog name"""
-        return "Sydney"
+        return "SYDNEY-COURT"
 
     def get_temperature(self):
         """Get temperature setting for this agent"""
@@ -67,53 +67,18 @@ class SydneyCog(BaseCog):
                     "content": content
                 })
 
-            # Process current message and any images
-            content = []
-            has_images = False
-            
-            # Add any image attachments
-            for attachment in message.attachments:
-                if attachment.content_type and attachment.content_type.startswith("image/"):
-                    has_images = True
-                    content.append({
-                        "type": "image_url",
-                        "image_url": { "url": attachment.url }
-                    })
-
-            # Check for image URLs in embeds
-            for embed in message.embeds:
-                if embed.image and embed.image.url:
-                    has_images = True
-                    content.append({
-                        "type": "image_url",
-                        "image_url": { "url": embed.image.url }
-                    })
-                if embed.thumbnail and embed.thumbnail.url:
-                    has_images = True
-                    content.append({
-                        "type": "image_url",
-                        "image_url": { "url": embed.thumbnail.url }
-                    })
-
-            # Add the text content
-            content.append({
-                "type": "text",
-                "text": "Please describe this image in detail." if has_images else message.content
-            })
-
-            # Add the message with multimodal content
+            # Add the current message
             messages.append({
                 "role": "user",
-                "content": content
+                "content": message.content
             })
 
-            logging.debug(f"[Sydney] Sending {len(messages)} messages to API")
-            logging.debug(f"[Sydney] Formatted prompt: {formatted_prompt}")
-            logging.debug(f"[Sydney] Has images: {has_images}")
+            logging.debug(f"[SYDNEY-COURT] Sending {len(messages)} messages to API")
+            logging.debug(f"[SYDNEY-COURT] Formatted prompt: {formatted_prompt}")
 
             # Get temperature for this agent
             temperature = self.get_temperature()
-            logging.debug(f"[Sydney] Using temperature: {temperature}")
+            logging.debug(f"[SYDNEY-COURT] Using temperature: {temperature}")
 
             # Get user_id and guild_id
             user_id = str(message.author.id)
@@ -125,25 +90,24 @@ class SydneyCog(BaseCog):
                 model=self.model,
                 temperature=temperature,
                 stream=True,
-                provider="openrouter",
+                provider="openpipe",
                 user_id=user_id,
                 guild_id=guild_id,
-                prompt_file=self.prompt_file
+                prompt_file="sydney_prompts"
             )
 
             return response_stream
 
         except Exception as e:
-            logging.error(f"Error processing message for Sydney: {e}")
+            logging.error(f"Error processing message for SYDNEY-COURT: {e}")
             return None
 
 async def setup(bot):
-    # Register the cog with its proper name
     try:
         cog = SydneyCog(bot)
         await bot.add_cog(cog)
-        logging.info(f"[Sydney] Registered cog with qualified_name: {cog.qualified_name}")
+        logging.info(f"[SYDNEY-COURT] Registered cog with qualified_name: {cog.qualified_name}")
         return cog
     except Exception as e:
-        logging.error(f"[Sydney] Failed to register cog: {e}", exc_info=True)
+        logging.error(f"[SYDNEY-COURT] Failed to register cog: {e}", exc_info=True)
         raise
