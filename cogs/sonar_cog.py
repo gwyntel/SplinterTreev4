@@ -98,9 +98,18 @@ class SonarCog(BaseCog):
 
             if response and 'choices' in response:
                 content = response['choices'][0]['message']['content']
+                citations = response.get('citations', [])
+
+                # Add citations if present
+                if citations:
+                    content += "\n\n**Sources:**"
+                    for i, citation in enumerate(citations, 1):
+                        content += f"\n[{i}] {citation}"
+
                 # Create async generator to yield content
                 async def response_generator():
                     yield content
+
                 return response_generator()
 
             return None
