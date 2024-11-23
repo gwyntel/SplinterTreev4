@@ -25,6 +25,7 @@ class HelpCog(commands.Cog, name="Help"):
         self.dynamic_prompts_file = "dynamic_prompts.json"
         self.activated_channels_file = "activated_channels.json"
         self.activated_channels = self.load_activated_channels()
+        self.prompts_file = "prompts/consolidated_prompts.json"
         logging.debug("[Help] Initialized")
 
     def load_activated_channels(self):
@@ -40,6 +41,102 @@ class HelpCog(commands.Cog, name="Help"):
         except Exception as e:
             logging.error(f"[Help] Error loading activated channels: {e}")
             return {}
+
+    def _save_system_prompts(self, prompts):
+        """Save system prompts to file"""
+        try:
+            with open(self.prompts_file, 'w', encoding='utf-8') as f:
+                json.dump({'system_prompts': prompts}, f, indent=2)
+            logging.info("[Help] Saved system prompts")
+        except Exception as e:
+            logging.error(f"[Help] Error saving system prompts: {str(e)}")
+            raise
+
+    def _load_system_prompts(self):
+        """Load system prompts from file"""
+        try:
+            if os.path.exists(self.prompts_file):
+                with open(self.prompts_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    return data.get('system_prompts', {})
+            return {}
+        except Exception as e:
+            logging.error(f"[Help] Error loading system prompts: {str(e)}")
+            return {}
+
+    @commands.hybrid_command(name="set_system_prompt", with_app_command=True)
+    @commands.has_permissions(administrator=True)
+    @discord.app_commands.describe(
+        agent="The AI agent to set the prompt for",
+        prompt="The new system prompt to use"
+    )
+    async def set_system_prompt(self, ctx, agent: str, *, prompt: str):
+        """Set a custom system prompt for an AI agent. Use /set_system_prompt <agent> <prompt> or !set_system_prompt <agent> <prompt>"""
+        try:
+            # Load current prompts
+            prompts = self._load_system_prompts()
+            
+            # Find the cog
+            cog = None
+            for c in self.bot.cogs.values():
+                if hasattr(c, 'name') and c.name.lower() == agent.lower():
+                    cog = c
+                    break
+            
+            if not cog:
+                await ctx.send(f"❌ Agent '{agent}' not found")
+                return
+            
+            # Update the prompt
+            prompts[agent.lower()] = prompt
+            
+            # Save prompts
+            self._save_system_prompts(prompts)
+            
+            # Update the cog's prompt
+            cog.raw_prompt = prompt
+            
+            await ctx.send(f"✅ System prompt updated for {agent}")
+            
+        except Exception as e:
+            logging.error(f"[Help] Error setting system prompt: {str(e)}")
+            await ctx.send("❌ Error setting system prompt")
+
+    @commands.hybrid_command(name="reset_system_prompt", with_app_command=True)
+    @commands.has_permissions(administrator=True)
+    @discord.app_commands.describe(agent="The AI agent to reset the prompt for")
+    async def reset_system_prompt(self, ctx, agent: str):
+        """Reset an AI agent's system prompt to default. Use /reset_system_prompt <agent> or !reset_system_prompt <agent>"""
+        try:
+            # Load current prompts
+            prompts = self._load_system_prompts()
+            
+            # Find the cog
+            cog = None
+            for c in self.bot.cogs.values():
+                if hasattr(c, 'name') and c.name.lower() == agent.lower():
+                    cog = c
+                    break
+            
+            if not cog:
+                await ctx.send(f"❌ Agent '{agent}' not found")
+                return
+            
+            # Remove the custom prompt if it exists
+            if agent.lower() in prompts:
+                del prompts[agent.lower()]
+                
+            # Save prompts
+            self._save_system_prompts(prompts)
+            
+            # Reset the cog's prompt to default
+            cog.raw_prompt = cog.default_prompt
+            
+            await ctx.send(f"✅ System prompt reset to default for {agent}")
+            
+        except Exception as e:
+            logging.error(f"[Help] Error resetting system prompt: {str(e)}")
+            await ctx.send("❌ Error resetting system prompt")
 
     def get_all_models(self):
         """Get all models and their details from registered cogs"""

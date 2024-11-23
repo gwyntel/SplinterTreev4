@@ -42,6 +42,15 @@ class ContextCog(commands.Cog):
         except Exception as e:
             logging.error(f"Failed to set up database: {str(e)}")
 
+    def _save_context_windows(self):
+        """Save context window settings to file"""
+        try:
+            with open('context_windows.json', 'w') as f:
+                json.dump(CONTEXT_WINDOWS, f)
+            logging.info("Saved context window settings")
+        except Exception as e:
+            logging.error(f"Error saving context settings: {str(e)}")
+
     @commands.hybrid_command(name='getcontext', with_app_command=True)
     async def get_context_command(self, ctx):
         """View current context window size. Use /getcontext or !getcontext"""
@@ -52,6 +61,41 @@ class ContextCog(commands.Cog):
         except Exception as e:
             logging.error(f"[Context] Error getting context size: {str(e)}")
             await ctx.send("❌ Error getting context window size")
+
+    @commands.hybrid_command(name='setcontext', with_app_command=True)
+    @commands.has_permissions(manage_messages=True)
+    @discord.app_commands.describe(size="Number of messages to keep in context")
+    async def set_context_command(self, ctx, size: int):
+        """Set the context window size. Use /setcontext <size> or !setcontext <size>"""
+        try:
+            if size < 1:
+                await ctx.send("❌ Context window size must be at least 1")
+                return
+            if size > MAX_CONTEXT_WINDOW:
+                await ctx.send(f"❌ Context window size cannot exceed {MAX_CONTEXT_WINDOW}")
+                return
+
+            channel_id = str(ctx.channel.id)
+            CONTEXT_WINDOWS[channel_id] = size
+            self._save_context_windows()
+            await ctx.send(f"✅ Context window size set to {size} messages")
+        except Exception as e:
+            logging.error(f"[Context] Error setting context size: {str(e)}")
+            await ctx.send("❌ Error setting context window size")
+
+    @commands.hybrid_command(name='resetcontext', with_app_command=True)
+    @commands.has_permissions(manage_messages=True)
+    async def reset_context_command(self, ctx):
+        """Reset context window size to default. Use /resetcontext or !resetcontext"""
+        try:
+            channel_id = str(ctx.channel.id)
+            if channel_id in CONTEXT_WINDOWS:
+                del CONTEXT_WINDOWS[channel_id]
+                self._save_context_windows()
+            await ctx.send(f"✅ Context window size reset to default ({DEFAULT_CONTEXT_WINDOW} messages)")
+        except Exception as e:
+            logging.error(f"[Context] Error resetting context size: {str(e)}")
+            await ctx.send("❌ Error resetting context window size")
 
     @commands.hybrid_command(name='clearcontext', with_app_command=True)
     @commands.has_permissions(manage_messages=True)
