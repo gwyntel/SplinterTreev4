@@ -244,7 +244,7 @@ class RouterCog(BaseCog):
                 # Start typing indicator
                 async with message.channel.typing():
                     # Call the routing model with streaming enabled
-                    response_stream = await self.api_client.call_openpipe(
+                    response_stream = await api.call_openpipe(
                         messages=messages,
                         model=self.model,
                         temperature=self.get_temperature(),
