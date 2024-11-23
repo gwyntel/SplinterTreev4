@@ -14,7 +14,7 @@ class Claude3HaikuCog(BaseCog):
             model="openpipe:openrouter/anthropic/claude-3-5-haiku:beta",
             provider="openpipe",
             prompt_file="claude_prompts",
-            supports_vision=False
+            supports_vision=True
         )
         logging.debug(f"[Claude-3-Haiku] Initialized with raw_prompt: {self.raw_prompt}")
         logging.debug(f"[Claude-3-Haiku] Using provider: {self.provider}")
