@@ -38,172 +38,97 @@ A powerful Discord bot that provides access to multiple AI language models with 
 - **UnslopNemoCog**: Handles medium-length interactions with group scenes and dialogue.
 - **LiquidCog**: Provides quick actions and short-form content responses.
 - **HermesCog**: Focused on mental health and crisis support, handling sensitive topics with high priority.
+- **GPT4OCog**:
+  - **Model**: `openpipe:openrouter/openai/gpt-4o-2024-11-20`
+  - **Provider**: `openpipe`
+  - **Trigger**: `'gpt4o', '4o', 'openai'`
+  - **Vision Support**: **No**
+  - **Temperature**: Configurable via `temperatures.json`
+  - **Strengths**:
+    - Specialized model for focused functionality.
+    - Temperature control for creativity and randomness.
+    - Contextual understanding through context cog integration.
+    - API integration with `openrouter`.
+    - Comprehensive error handling.
+  - **Weaknesses**:
+    - Dependency on external API.
+    - Limited flexibility.
+    - Potential performance issues.
+    - Configuration requirements.
 
-## 🛠️ Setup
+- **GrokCog**:
+  - **Model**: `openpipe:openrouter/x-ai/grok-beta`
+  - **Provider**: `openpipe`
+  - **Trigger**: `'grok', 'xAI'`
+  - **Vision Support**: **No**
+  - **Temperature**: Configurable via `temperatures.json`
+  - **Strengths**:
+    - Specialized model for focused functionality.
+    - Temperature control for creativity and randomness.
+    - Contextual understanding through context cog integration.
+    - API integration with `openrouter`.
+    - Comprehensive error handling.
+  - **Weaknesses**:
+    - Dependency on external API.
+    - Limited flexibility.
+    - Potential performance issues.
+    - Configuration requirements.
 
-### Prerequisites
+- **HelpCog**:
+  - **Strengths**:
+    - Comprehensive help commands including model lists and descriptions.
+    - Model list management commands (`/listmodels`, `/list_agents`).
+    - System prompt management commands (`/set_system_prompt`, `/reset_system_prompt`).
+    - Webhook integration command (`/hook`).
+    - Error handling for various commands.
+    - Slash command support.
+  - **Weaknesses**:
+    - Dependency on other cogs like RouterCog for some functionalities.
+    - Complexity in error handling which might add complexity to the codebase if not managed properly.
+    - Limited flexibility in webhook handling which is specific to sending messages through configured webhooks.
 
-- **Python 3.10+**
-- **Discord Bot Token**: For bot authentication.
-- **OpenRouter API Key**: For model routing capabilities.
-- **OpenPipe API Key and URL**: For model access and interaction logging.
-- **OpenAI API Key**: For additional services.
-- **SQLite3**: For database interactions.
+- **ManagementCog**:
+  - **Strengths**:
+    - Opt-out feature allowing users to opt out of all bot interactions via `optout`.
+    - Database interaction for managing banned users securely using SQLite.
+    - Comprehensive error handling ensuring any issues are logged and managed properly.
+    - API integration with `openrouter`.
+    - Contextual understanding through context cog integration.
+  - **Weaknesses**:
+    - Dependency on external API which could be a weakness if it experiences downtime or changes its interface.
+    - Limited flexibility as it is highly specialized for management tasks.
+    - Potential performance issues due to database operations.
+    - Configuration requirements for specific files like `temperatures.json`.
 
-### Installation
+- **WebhookCog**:
+  - **Strengths**:
+    - Webhook integration for sending LLM responses through Discord webhooks.
+    - Comprehensive error handling including retries for rate limits and timeouts.
+    - Scalability in handling multiple webhooks.
+    - Customization options for webhooks with unique names and avatars.
+    - Automation of sending messages through webhooks.
+  - **Weaknesses**:
+    - Rate limitations which may still fail if exceeded despite retries.
+    - Complexity in error handling mechanism.
+    - Configuration requirements for specific settings like `MAX_RETRIES`, `WEBHOOK_TIMEOUT`.
 
-1. **Clone the repository**:
-
-   ```bash
-   git clone https://github.com/yourusername/SplinterTreev4.git
-   cd SplinterTreev4
-   ```
-
-2. **Install dependencies**:
-
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. **Configure environment**:
-
-   - Copy `.env.example` to `.env`
-   - Add your API keys and configuration variables as per the **Environment Variables** section.
-
-4. **Initialize the database**:
-
-   ```bash
-   python initialize_interaction_logs_db.py
-   ```
-
-5. **Run the bot**:
-
-   ```bash
-   python bot.py
-   ```
-
-### Heroku Deployment
-
-1. **Create a new Heroku app**.
-2. **Set your environment variables** in Heroku settings as per the **Environment Variables** section.
-3. **Deploy using Git or GitHub integration**.
-4. **Scale dynos**:
-
-   ```bash
-   heroku ps:scale worker=1
-   ```
-
-## ⚙️ Configuration
-
-### Environment Variables
-
-```bash
-# Discord Bot Configuration
-DISCORD_TOKEN=           # Discord bot authentication token
-                        # Format: MTxxxxxxxxxx.xxxxxx.xxx-xxxxxxxxxxxxxxxxxxxxx
-
-# OpenPipe Configuration
-OPENPIPE_API_KEY=       # OpenPipe API key for model access
-                        # Format: opk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-OPENPIPE_API_URL=       # OpenPipe API endpoint
-                        # Default: https://api.openpipe.ai/api/v1
-
-# OpenRouter Configuration
-OPENROUTER_API_KEY=     # OpenRouter API key for model routing
-                        # Format: sk-or-v1-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-
-# OpenAI Configuration
-OPENAI_API_KEY=         # OpenAI API key for additional services
-                        # Format: sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-
-# Debug Configuration
-DEBUG=false             # Enable/disable debug mode
-LOG_LEVEL=INFO          # Logging level (INFO, DEBUG, ERROR, etc.)
-```
-
-### Configuration Files
-
-- **`temperatures.json`**: Model temperature settings (default: `0.7` if not specified).
-- **`dynamic_prompts.json`**: Custom system prompts per channel to override default prompts.
-- **`bot_config.json`**: Bot configuration settings for status display and feature toggles.
-- **`databases/schema.sql`**: SQLite database schema for context and interaction logging.
-- **`activated_channels.json`**: Tracks channels where the bot is activated.
-
-## 🧩 Cog Architecture
-
-### Core Cogs
-
-1. **BaseCog** (`base_cog.py`)
-   - Parent class for all model cogs.
-   - Handles message processing and context management.
-   - Implements reroll functionality.
-   - Manages bot profile updates and typing indicators.
-   - Provides emotion analysis and interaction logging.
-
-2. **RouterCog** (`router_cog.py`)
-   - Intelligent message routing system.
-   - Routes messages to appropriate models based on content.
-   - Handles DMs and channel activation.
-   - Prevents routing loops.
-   - Model: `mistralai/ministral-3b`
-   - Provider: `openrouter`
-
-3. **ContextCog** (`context_cog.py`)
-   - Manages conversation history.
-   - Handles context windows and summaries.
-   - Maintains shared context between models.
-   - Manages SQLite database interactions.
-
-4. **HelpCog** (`help_cog.py`)
-   - Provides command documentation.
-   - Lists available models and features.
-   - Manages system prompts.
-   - Handles webhook integrations.
-
-### Model Cogs
-
-1. **MixtralCog** (`mixtral_cog.py`)
-   - Model: `mistralai/pixtral-12b`
-   - Provider: `openrouter`
-   - Trigger: `'mixtral'`
-   - Vision support: **No**
-   - Temperature: Configurable via `temperatures.json`
-
-2. **GeminiCog** (`gemini_cog.py`)
-   - Vision-capable model.
-   - Specialized in image analysis.
-   - Trigger: `'gemini'`
-   - Vision support: **Yes**
-
-3. **SonarCog** (`sonar_cog.py`)
-   - Specialized in current events and updates.
-   - Real-time information processing.
-   - Trigger: `'sonar'`
-
-4. **NemotronCog** (`nemotron_cog.py`)
-   - Technical and code-focused model.
-   - Complex system design capabilities.
-   - Trigger: `'nemotron'`
-
-5. **NoromaidCog** (`noromaid_cog.py`)
-   - Roleplay and narrative focused.
-   - Complex scene handling.
-   - Trigger: `'noromaid'`
-
-6. **UnslopNemoCog** (`unslopnemo_cog.py`)
-   - Medium-length interactions.
-   - Group scenes and dialogue.
-   - Trigger: `'unslopnemo'`
-
-7. **LiquidCog** (`liquid_cog.py`)
-   - Quick actions and responses.
-   - Short-form content.
-   - Trigger: `'liquid'`
-
-8. **HermesCog** (`hermes_cog.py`)
-   - Mental health and crisis support.
-   - High priority for sensitive topics.
-   - Trigger: `'hermes'`
+- **InferorCog**:
+  - **Model**: `openpipe:infermatic/Infermatic-MN-12B-Inferor-v0.0`
+  - **Provider**: `openpipe`
+  - **Trigger**: `'inferor'`
+  - **Vision Support**: **No**
+  - **Temperature**: Configurable via `temperatures.json`
+  - **Strengths**:
+    - Specialized model for focused functionality.
+    - Temperature control for creativity and randomness.
+    - Contextual understanding through context cog integration.
+    - API integration with `openrouter`.
+    - Comprehensive error handling.
+  - **Weaknesses**:
+    - Dependency on external API.
+    - Limited flexibility.
+    - Potential performance issues.
+    - Configuration requirements.
 
 ### Management Cogs
 
@@ -219,24 +144,24 @@ LOG_LEVEL=INFO          # Logging level (INFO, DEBUG, ERROR, etc.)
 
 ## 🔧 Commands
 
-**Note**: Commands are prefixed with `!` and may require administrative permissions.
+**Note**: Commands are prefixed with `` and may require administrative permissions.
 
-- **`!help`**: Show help message with a list of features and commands.
-- **`!listmodels`**: Show all available models (simple list).
-- **`!list_agents`**: Show all available agents with detailed info.
-- **`!uptime`**: Show how long the bot has been running.
-- **`!set_system_prompt <agent> <prompt>`**: Set a custom system prompt for an AI agent (Admin only).
-- **`!reset_system_prompt <agent>`**: Reset an AI agent's system prompt to default (Admin only).
-- **`!setcontext <size>`**: Set the number of previous messages to include in context (Admin only).
-- **`!getcontext`**: View current context window size.
-- **`!resetcontext`**: Reset context window to default size (Admin only).
-- **`!clearcontext [hours]`**: Clear conversation history, optionally specify hours (Admin only).
-- **`!router_activate`**: Activate the router to respond to all messages in the current channel (Admin only).
-- **`!router_deactivate`**: Deactivate the router in the current channel (Admin only).
-- **`!hook <message>`**: Send a response through configured Discord webhooks.
-- **`!channel_activate`**: Make the bot respond to every message in the current channel (Admin only).
-- **`!channel_deactivate`**: Deactivate the bot's response to every message in the current channel (Admin only).
-- **`!list_activated`**: List all activated channels in the current server (Admin only).
+- **`help`**: Show help message with a list of features and commands.
+- **`listmodels`**: Show all available models (simple list).
+- **`list_agents`**: Show all available agents with detailed info.
+- **`uptime`**: Show how long the bot has been running.
+- **`set_system_prompt <agent> <prompt>`**: Set a custom system prompt for an AI agent (Admin only).
+- **`reset_system_prompt <agent>`**: Reset an AI agent's system prompt to default (Admin only).
+- **`setcontext <size>`**: Set the number of previous messages to include in context (Admin only).
+- **`getcontext`**: View current context window size.
+- **`resetcontext`**: Reset context window to default size (Admin only).
+- **`clearcontext [hours]`**: Clear conversation history, optionally specify hours (Admin only).
+- **`router_activate`**: Activate the router to respond to all messages in the current channel (Admin only).
+- **`router_deactivate`**: Deactivate the router in the current channel (Admin only).
+- **`hook <message>`**: Send a response through configured Discord webhooks.
+- **`channel_activate`**: Make the bot respond to every message in the current channel (Admin only).
+- **`channel_deactivate`**: Deactivate the bot's response to every message in the current channel (Admin only).
+- **`list_activated`**: List all activated channels in the current server (Admin only).
 
 ## 📚 System Prompt Variables
 

@@ -7,6 +7,7 @@ from datetime import datetime, timezone, timedelta
 from textblob import TextBlob
 from shared.api import api
 from .base_cog import BaseCog
+import xml.etree.ElementTree as ET
 
 class RouterCog(BaseCog):
     def __init__(self, bot):
@@ -126,6 +127,16 @@ class RouterCog(BaseCog):
     def _extract_model_name(self, response: str) -> str:
         """Extract model name from response with better error handling"""
         try:
+            # Check if response contains XML tags
+            if '<' in response and '>' in response:
+                root = ET.fromstring(response)
+                model_tag = root.find('modelCog')
+                if model_tag is not None:
+                    return model_tag.text.strip()
+                debug_comment_tag = root.find('debugComment')
+                if debug_comment_tag is not None:
+                    logging.info(f"[Router] Debug comment: {debug_comment_tag.text}")
+                    
             # Clean up the response
             clean_response = response.strip().lower()
             

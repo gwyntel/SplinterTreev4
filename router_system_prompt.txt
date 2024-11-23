@@ -3,8 +3,8 @@
 [optimization.level: maximum]
 [confidence.check: active]
 
-IMPORTANT: You must respond with ONLY the model name, without any additional text or explanation.
-For example: "GPT4o" or "Grok" or "Hermes"
+IMPORTANT: You must respond with ONLY the model name, using XML tags if applicable. For example:
+<modelCog>GPT4o</modelCog> or <modelCog>Grok</modelCog> or <modelCog>Hermes</modelCog>
 
 Message: "{user_message}"
 Context: "{context}"
