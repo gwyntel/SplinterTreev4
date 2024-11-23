@@ -15,7 +15,7 @@ class RouterCog(BaseCog):
             name="Router",
             nickname="Router",
             trigger_words=[],
-            model="openpipe:openrouter/openai/gpt-4o-2024-11-20",
+            model="mistralai/ministral-8b",
             provider="openpipe",
             prompt_file="router",
             supports_vision=False
@@ -48,7 +48,19 @@ class RouterCog(BaseCog):
             'claude': 'Claude3Haiku',
             'llamavision': 'LlamaVision',
             'llama': 'LlamaVision',
-            'vision': 'LlamaVision'
+            'vision': 'LlamaVision',
+            'hermes': 'Hermes',
+            'grok': 'Grok',
+            'sonar': 'Sonar',
+            'wizard': 'Wizard',
+            'qwen': 'Qwen',
+            'unslop': 'Unslop',
+            'rocinante': 'Rocinante',
+            'sorcerer': 'Sorcerer',
+            'nemotron': 'Nemotron',
+            'magnum': 'Magnum',
+            'inferor': 'Inferor',
+            'sydney': 'Sydney'
         }
 
     def get_temperature(self):
@@ -114,14 +126,19 @@ class RouterCog(BaseCog):
     def _normalize_model_name(self, name: str) -> str:
         """Normalize model name to correct cog name format"""
         # Remove non-alphanumeric characters and convert to lowercase
-        clean_name = ''.join(c for c in name if c.isalnum()).lower()
+        clean_name = ''.join(c.lower() for c in name if c.isalnum() or c.isspace()).strip()
         
         # Check if we have a mapping for this name
         if clean_name in self.model_name_map:
             return self.model_name_map[clean_name]
             
-        # If no mapping exists, capitalize first letter of each word
-        return ''.join(word.capitalize() for word in clean_name.split())
+        # If no mapping exists, try to find a partial match
+        for key, value in self.model_name_map.items():
+            if key in clean_name or clean_name in key:
+                return value
+                
+        # Default to GPT4O if no match found
+        return 'GPT4O'
 
     def analyze_sentiment(self, text: str) -> tuple:
         """
@@ -261,12 +278,10 @@ class RouterCog(BaseCog):
                         if chunk:
                             routing_response += chunk
 
-                    # Debugging: Log the raw routing response
-                    logging.debug(f"[Router] Raw routing response: {routing_response}")
-
                     # Clean up the response to get the cog name
                     cog_name = routing_response.strip().split('\n')[0].strip()
                     cog_name = self._normalize_model_name(cog_name)
+                    logging.info(f"[Router] Raw response: {routing_response}")
                     logging.info(f"[Router] Normalized cog name: {cog_name}")
 
                     # Attempt to get the cog
@@ -280,7 +295,13 @@ class RouterCog(BaseCog):
                         await cog.handle_message(message)
                     else:
                         logging.error(f"[Router] Cog '{cog_name}' not found or 'handle_message' not implemented")
-                        await message.channel.send("❌ Unable to route message to the appropriate module.")
+                        # Default to GPT4O if cog not found
+                        fallback_cog = self.bot.get_cog("GPT4OCog")
+                        if fallback_cog and hasattr(fallback_cog, 'handle_message'):
+                            logging.info("[Router] Falling back to GPT4OCog")
+                            await fallback_cog.handle_message(message)
+                        else:
+                            await message.channel.send("❌ Unable to route message to the appropriate module.")
 
             except ValueError as e:
                 # Handle specific API response structure errors
