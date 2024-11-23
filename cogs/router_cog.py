@@ -27,6 +27,7 @@ class RouterCog(BaseCog):
         self.router_system_prompt = self._load_router_system_prompt()
         # Start command syncing task
         self.sync_task = None
+        self.api_client = api  # Ensure api_client is initialized
         
         # Load temperature settings
         try:
