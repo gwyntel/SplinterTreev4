@@ -11,6 +11,44 @@ class AsyncContextManagerMock:
         pass
 
 @pytest.mark.asyncio
+async def test_cog_check_dm_channel():
+    bot = MagicMock()
+    ctx = MagicMock()
+    ctx.channel = MagicMock(spec=DMChannel)
+    
+    cog = RouterCog(bot)
+    result = await cog.cog_check(ctx)
+    
+    # Should allow commands in DM channels without permission check
+    assert result is True
+
+@pytest.mark.asyncio
+async def test_cog_check_guild_channel_with_permission():
+    bot = MagicMock()
+    ctx = MagicMock()
+    ctx.channel = MagicMock()  # Not a DMChannel
+    ctx.author.guild_permissions.manage_channels = True
+    
+    cog = RouterCog(bot)
+    result = await cog.cog_check(ctx)
+    
+    # Should allow commands with manage_channels permission
+    assert result is True
+
+@pytest.mark.asyncio
+async def test_cog_check_guild_channel_without_permission():
+    bot = MagicMock()
+    ctx = MagicMock()
+    ctx.channel = MagicMock()  # Not a DMChannel
+    ctx.author.guild_permissions.manage_channels = False
+    
+    cog = RouterCog(bot)
+    result = await cog.cog_check(ctx)
+    
+    # Should not allow commands without manage_channels permission
+    assert result is False
+
+@pytest.mark.asyncio
 async def test_activate_guild_channel():
     bot = MagicMock()
     ctx = MagicMock()

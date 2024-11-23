@@ -61,8 +61,15 @@ class RouterCog(BaseCog):
         except Exception as e:
             logging.error(f"[Router] Error saving activated channels: {e}")
 
+    async def cog_check(self, ctx):
+        """Check if user has permission to use commands in this context"""
+        # Allow all commands in DM channels
+        if isinstance(ctx.channel, discord.DMChannel):
+            return True
+        # Require manage_channels permission in guild channels
+        return ctx.author.guild_permissions.manage_channels
+
     @commands.hybrid_command(name="activate", description="Activate router in this channel")
-    @commands.has_permissions(manage_channels=True)
     async def activate(self, ctx):
         """Activate the router in the current channel"""
         channel_id = str(ctx.channel.id)
@@ -82,7 +89,6 @@ class RouterCog(BaseCog):
             await ctx.send("✅ Router activated in this channel")
 
     @commands.hybrid_command(name="deactivate", description="Deactivate router in this channel")
-    @commands.has_permissions(manage_channels=True)
     async def deactivate(self, ctx):
         """Deactivate the router in the current channel"""
         channel_id = str(ctx.channel.id)
