@@ -120,7 +120,6 @@ async def test_route_message_api_error(mock_bot, mock_message, mock_api):
             if name == "GPT4OCog":
                 return gpt4o_cog
             return None
-            
         mock_bot.get_cog = MagicMock(side_effect=get_cog)
 
         # Create RouterCog instance
@@ -132,9 +131,8 @@ async def test_route_message_api_error(mock_bot, mock_message, mock_api):
         await cog.route_message(mock_message)
 
         # Verify fallback mechanism
-        mock_message.channel.send.assert_called_once()
-        mock_bot.get_cog.assert_called_with("GPT4OCog")
-        gpt4o_cog.handle_message.assert_not_called()  # Error message is sent instead
+        gpt4o_cog.handle_message.assert_called_once_with(mock_message)
+        mock_message.channel.send.assert_not_called()
 
 @pytest.mark.asyncio
 async def test_route_message_multiple_cogs(mock_bot, mock_message, mock_api):

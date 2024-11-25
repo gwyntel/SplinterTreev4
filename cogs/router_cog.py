@@ -354,7 +354,13 @@ class RouterCog(BaseCog):
 
                 except Exception as e:
                     logging.error(f"[Router] API error: {str(e)}")
-                    await message.channel.send("❌ An error occurred while processing your message. Please try again later.")
+                    # Attempt to fallback to GPT4O
+                    fallback_cog = self.bot.get_cog("GPT4OCog")
+                    if fallback_cog and hasattr(fallback_cog, 'handle_message'):
+                        logging.info("[Router] Falling back to GPT4OCog due to API error")
+                        await fallback_cog.handle_message(message)
+                    else:
+                        await message.channel.send("❌ An error occurred while processing your message. Please try again later.")
 
         except Exception as e:
             logging.error(f"[Router] Error routing message: {str(e)}")
