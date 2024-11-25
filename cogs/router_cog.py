@@ -29,6 +29,13 @@ class RouterCog(BaseCog):
         
         # Message tracking to prevent multiple responses
         self.handled_messages = set()
+
+        # Bot names to ignore (in addition to actual bot mentions)
+        self.bot_names = {
+            'grok', 'claude', 'gpt4', 'gpt-4', 'sydney', 'hermes', 
+            'inferor', 'magnum', 'nemotron', 'qwen', 'rocinante', 
+            'sorcerer', 'sonar', 'unslop', 'wizard'
+        }
         
         # Load temperature settings
         try:
@@ -198,6 +205,24 @@ class RouterCog(BaseCog):
             logging.error(f"[Router] Error analyzing sentiment: {str(e)}")
             return 0.0, 0.0
 
+    def _mentions_other_bot(self, message: discord.Message) -> bool:
+        """Check if message mentions another bot by name or mention"""
+        # Check for bot mentions
+        for mention in message.mentions:
+            if mention.bot and mention.id != self.bot.user.id:
+                return True
+        
+        # Check for bot names in message
+        msg_lower = message.content.lower()
+        words = set(msg_lower.split())
+        
+        # Check if any bot name is present as a whole word
+        for bot_name in self.bot_names:
+            if bot_name in words:
+                return True
+        
+        return False
+
     async def cog_check(self, ctx):
         """Check if user has permission to use commands in this context"""
         # Allow all commands in DM channels
@@ -255,6 +280,11 @@ class RouterCog(BaseCog):
             # Check if message has already been handled
             if message.id in self.handled_messages:
                 logging.info(f"[Router] Message {message.id} already handled, skipping")
+                return
+            
+            # Check if message mentions other bots
+            if self._mentions_other_bot(message):
+                logging.info(f"[Router] Message {message.id} mentions other bot, skipping")
                 return
             
             # Mark message as handled
@@ -343,6 +373,10 @@ class RouterCog(BaseCog):
 
         # Check if message has already been handled
         if message.id in self.handled_messages:
+            return
+
+        # Check if message mentions other bots
+        if self._mentions_other_bot(message):
             return
 
         # Always process DMs
