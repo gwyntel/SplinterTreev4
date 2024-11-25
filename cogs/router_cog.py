@@ -27,6 +27,9 @@ class RouterCog(BaseCog):
         self.router_system_prompt = self._load_router_system_prompt()
         self.api_client = api
         
+        # Message tracking to prevent multiple responses
+        self.handled_messages = set()
+        
         # Load temperature settings
         try:
             with open('temperatures.json', 'r') as f:
@@ -249,6 +252,18 @@ class RouterCog(BaseCog):
     async def route_message(self, message):
         """Route the message to the appropriate cog based on the model's decision."""
         try:
+            # Check if message has already been handled
+            if message.id in self.handled_messages:
+                logging.info(f"[Router] Message {message.id} already handled, skipping")
+                return
+            
+            # Mark message as handled
+            self.handled_messages.add(message.id)
+            
+            # Clean up old message IDs (keep last 1000)
+            if len(self.handled_messages) > 1000:
+                self.handled_messages = set(list(self.handled_messages)[-1000:])
+
             # Analyze message sentiment
             polarity, subjectivity = self.analyze_sentiment(message.content)
             logging.info(f"[Router] Message sentiment - Polarity: {polarity}, Subjectivity: {subjectivity}")
@@ -324,6 +339,10 @@ class RouterCog(BaseCog):
         """Handle incoming messages"""
         # Ignore messages from bots
         if message.author.bot:
+            return
+
+        # Check if message has already been handled
+        if message.id in self.handled_messages:
             return
 
         # Always process DMs
