@@ -24,11 +24,8 @@ class RouterCog(BaseCog):
         self.db_path = 'databases/user_settings.db'
         self.start_time = datetime.now(timezone.utc)
         self.activated_channels = self._load_activated_channels()
-        # Load the system prompt
         self.router_system_prompt = self._load_router_system_prompt()
-        # Start command syncing task
-        self.sync_task = None
-        self.api_client = api  # Ensure api_client is initialized
+        self.api_client = api
         
         # Load temperature settings
         try:
@@ -131,13 +128,13 @@ class RouterCog(BaseCog):
         try:
             # Check if response contains XML tags
             if '<' in response and '>' in response:
-                root = ET.fromstring(response)
-                model_tag = root.find('modelCog')
-                if model_tag is not None:
-                    return model_tag.text.strip()
-                debug_comment_tag = root.find('debugComment')
-                if debug_comment_tag is not None:
-                    logging.info(f"[Router] Debug comment: {debug_comment_tag.text}")
+                try:
+                    root = ET.fromstring(response)
+                    model_tag = root.find('modelCog')
+                    if model_tag is not None:
+                        return model_tag.text.strip()
+                except ET.ParseError:
+                    logging.warning("[Router] Failed to parse XML response")
                     
             # Clean up the response
             clean_response = response.strip().lower()
@@ -215,92 +212,50 @@ class RouterCog(BaseCog):
     @commands.hybrid_command(name="activate", description="Activate router in this channel")
     async def activate(self, ctx):
         """Activate the router in the current channel"""
-        channel_id = str(ctx.channel.id)
-        
         if isinstance(ctx.channel, discord.DMChannel):
-            if 'DM' not in self.activated_channels:
-                self.activated_channels['DM'] = {}
-            self.activated_channels['DM'][channel_id] = True
-            self._save_activated_channels(self.activated_channels)
-            await ctx.send("✅ Router activated in this DM channel")
-        else:
-            guild_id = str(ctx.guild.id)
-            if guild_id not in self.activated_channels:
-                self.activated_channels[guild_id] = {}
-            self.activated_channels[guild_id][channel_id] = True
-            self._save_activated_channels(self.activated_channels)
-            await ctx.send("✅ Router activated in this channel")
+            await ctx.send("✅ Router is always active in DM channels")
+            return
+            
+        channel_id = str(ctx.channel.id)
+        guild_id = str(ctx.guild.id)
+        if guild_id not in self.activated_channels:
+            self.activated_channels[guild_id] = {}
+        self.activated_channels[guild_id][channel_id] = True
+        self._save_activated_channels(self.activated_channels)
+        await ctx.send("✅ Router activated in this channel")
 
     @commands.hybrid_command(name="deactivate", description="Deactivate router in this channel")
     async def deactivate(self, ctx):
         """Deactivate the router in the current channel"""
-        channel_id = str(ctx.channel.id)
-        
         if isinstance(ctx.channel, discord.DMChannel):
-            if 'DM' in self.activated_channels and channel_id in self.activated_channels['DM']:
-                del self.activated_channels['DM'][channel_id]
-                if not self.activated_channels['DM']:  # Remove DM dict if empty
-                    del self.activated_channels['DM']
-                self._save_activated_channels(self.activated_channels)
-                await ctx.send("✅ Router deactivated in this DM channel")
-            else:
-                await ctx.send("❌ Router is not activated in this DM channel")
+            await ctx.send("❌ Router cannot be deactivated in DM channels")
+            return
+            
+        channel_id = str(ctx.channel.id)
+        guild_id = str(ctx.guild.id)
+        if guild_id in self.activated_channels and channel_id in self.activated_channels[guild_id]:
+            del self.activated_channels[guild_id][channel_id]
+            if not self.activated_channels[guild_id]:  # Remove guild dict if empty
+                del self.activated_channels[guild_id]
+            self._save_activated_channels(self.activated_channels)
+            await ctx.send("✅ Router deactivated in this channel")
         else:
-            guild_id = str(ctx.guild.id)
-            if guild_id in self.activated_channels and channel_id in self.activated_channels[guild_id]:
-                del self.activated_channels[guild_id][channel_id]
-                if not self.activated_channels[guild_id]:  # Remove guild dict if empty
-                    del self.activated_channels[guild_id]
-                self._save_activated_channels(self.activated_channels)
-                await ctx.send("✅ Router deactivated in this channel")
-            else:
-                await ctx.send("❌ Router is not activated in this channel")
+            await ctx.send("❌ Router is not activated in this channel")
 
     async def handle_message(self, message):
+        """Legacy method to maintain compatibility with tests"""
+        await self.route_message(message)
+
+    async def route_message(self, message):
         """Route the message to the appropriate cog based on the model's decision."""
         try:
-            channel_id = str(message.channel.id)
-            is_dm = isinstance(message.channel, discord.DMChannel)
-
-            # Check if channel is activated
-            if is_dm:
-                if 'DM' not in self.activated_channels:
-                    logging.info("[Router] DM channel not activated.")
-                    return  # DM not activated
-                if channel_id not in self.activated_channels['DM']:
-                    logging.info("[Router] DM channel not activated.")
-                    return  # DM not activated
-            else:
-                guild_id = str(message.guild.id) if message.guild else None
-                if not guild_id or guild_id not in self.activated_channels or channel_id not in self.activated_channels[guild_id]:
-                    logging.info("[Router] Guild channel not activated.")
-                    return  # Channel not activated
-
             # Analyze message sentiment
             polarity, subjectivity = self.analyze_sentiment(message.content)
             logging.info(f"[Router] Message sentiment - Polarity: {polarity}, Subjectivity: {subjectivity}")
 
-            # Route to Hermes if sentiment is very negative (polarity < -0.5)
-            if polarity < -0.5 and subjectivity > 0.5:
-                logging.info("[Router] Routing to Hermes due to negative sentiment")
-                cog = self.bot.get_cog("HermesCog")
-                if cog and hasattr(cog, 'handle_message'):
-                    await cog.handle_message(message)
-                    return
-            # Route to Sydney for moderately negative sentiment (emotional support)
-            elif polarity < -0.2 and subjectivity > 0.3:
-                logging.info("[Router] Routing to Sydney due to moderate negative sentiment")
-                cog = self.bot.get_cog("SYDNEY-COURTCog")
-                if cog and hasattr(cog, 'handle_message'):
-                    await cog.handle_message(message)
-                    return
-
-            # Prepare the system prompt
-            system_prompt = self.router_system_prompt
-
             # Format the system prompt with the user message and sentiment
             context = f"Sentiment Analysis - Polarity: {polarity}, Subjectivity: {subjectivity}"
-            formatted_prompt = system_prompt.replace("{user_message}", message.content).replace("{context}", context)
+            formatted_prompt = self.router_system_prompt.replace("{user_message}", message.content).replace("{context}", context)
 
             # Prepare messages for the model
             messages = [
@@ -354,11 +309,9 @@ class RouterCog(BaseCog):
                             await message.channel.send("❌ Unable to route message to the appropriate module.")
 
             except ValueError as e:
-                # Handle specific API response structure errors
                 logging.error(f"[Router] API response structure error: {str(e)}")
                 await message.channel.send("❌ An error occurred while processing your message. The service may be temporarily unavailable.")
             except Exception as e:
-                # Handle other API errors
                 logging.error(f"[Router] API error: {str(e)}")
                 await message.channel.send("❌ An error occurred while processing your message. Please try again later.")
 
@@ -366,8 +319,37 @@ class RouterCog(BaseCog):
             logging.error(f"[Router] Error routing message: {str(e)}")
             await message.channel.send("❌ An error occurred while processing your message.")
 
+    @commands.Cog.listener()
+    async def on_message(self, message):
+        """Handle incoming messages"""
+        # Ignore messages from bots
+        if message.author.bot:
+            return
+
+        # Always process DMs
+        is_dm = isinstance(message.channel, discord.DMChannel)
+        if is_dm:
+            await self.route_message(message)
+            return
+
+        # Check if message mentions the bot
+        is_mention = self.bot.user in message.mentions
+        if is_mention:
+            await self.route_message(message)
+            return
+
+        # Check if channel is activated for guild messages
+        channel_id = str(message.channel.id)
+        guild_id = str(message.guild.id)
+        if guild_id in self.activated_channels and channel_id in self.activated_channels[guild_id]:
+            # Check for specific keywords that would trigger other cogs
+            for cog in self.bot.cogs.values():
+                if hasattr(cog, 'trigger_words') and any(word.lower() in message.content.lower() for word in cog.trigger_words):
+                    return  # Let other cogs handle their specific triggers
+            await self.route_message(message)
+
     async def cog_load(self):
-        """Called when the cog is loaded. Start command syncing."""
+        """Called when the cog is loaded."""
         await super().cog_load()
         logging.info("[Router] Cog loaded and commands synced successfully.")
 
