@@ -136,20 +136,19 @@ class RouterCog(BaseCog):
     def _extract_model_name(self, response: str) -> str:
         """Extract model name from response with better error handling"""
         try:
-            # Check if response contains XML tags
-            if '<' in response and '>' in response:
+            # Check for XML tags first
+            if '<modelCog>' in response and '</modelCog>' in response:
                 try:
-                    root = ET.fromstring(response)
-                    model_tag = root.find('modelCog')
-                    if model_tag is not None:
-                        return model_tag.text.strip()
-                except ET.ParseError:
-                    logging.warning("[Router] Failed to parse XML response")
-                    
-            # Clean up the response
+                    start = response.index('<modelCog>') + len('<modelCog>')
+                    end = response.index('</modelCog>')
+                    return response[start:end].strip()
+                except ValueError:
+                    pass
+
+            # Fallback to previous extraction method
             clean_response = response.strip().lower()
             
-            # Remove common prefixes/suffixes that might be added
+            # Remove common prefixes/suffixes
             prefixes = ['i recommend', 'use', 'route to', 'the best model is', 'model:', 'cog:', 'using']
             for prefix in prefixes:
                 if clean_response.startswith(prefix):
@@ -308,9 +307,9 @@ class RouterCog(BaseCog):
                 {"role": "user", "content": message.content}
             ]
 
-            try:
-                # Start typing indicator
-                async with message.channel.typing():
+            # Start typing indicator
+            async with message.channel.typing():
+                try:
                     # Call the routing model with streaming enabled
                     response_stream = await self.api_client.call_openpipe(
                         messages=messages,
@@ -353,12 +352,9 @@ class RouterCog(BaseCog):
                         else:
                             await message.channel.send("❌ Unable to route message to the appropriate module.")
 
-            except ValueError as e:
-                logging.error(f"[Router] API response structure error: {str(e)}")
-                await message.channel.send("❌ An error occurred while processing your message. The service may be temporarily unavailable.")
-            except Exception as e:
-                logging.error(f"[Router] API error: {str(e)}")
-                await message.channel.send("❌ An error occurred while processing your message. Please try again later.")
+                except Exception as e:
+                    logging.error(f"[Router] API error: {str(e)}")
+                    await message.channel.send("❌ An error occurred while processing your message. Please try again later.")
 
         except Exception as e:
             logging.error(f"[Router] Error routing message: {str(e)}")
@@ -392,14 +388,15 @@ class RouterCog(BaseCog):
             return
 
         # Check if channel is activated for guild messages
-        channel_id = str(message.channel.id)
-        guild_id = str(message.guild.id)
-        if guild_id in self.activated_channels and channel_id in self.activated_channels[guild_id]:
-            # Check for specific keywords that would trigger other cogs
-            for cog in self.bot.cogs.values():
-                if hasattr(cog, 'trigger_words') and any(word.lower() in message.content.lower() for word in cog.trigger_words):
-                    return  # Let other cogs handle their specific triggers
-            await self.route_message(message)
+        if message.guild:
+            channel_id = str(message.channel.id)
+            guild_id = str(message.guild.id)
+            if guild_id in self.activated_channels and channel_id in self.activated_channels[guild_id]:
+                # Check for specific keywords that would trigger other cogs
+                for cog in self.bot.cogs.values():
+                    if hasattr(cog, 'trigger_words') and any(word.lower() in message.content.lower() for word in cog.trigger_words):
+                        return  # Let other cogs handle their specific triggers
+                await self.route_message(message)
 
     async def cog_load(self):
         """Called when the cog is loaded."""

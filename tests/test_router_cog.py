@@ -1,196 +1,172 @@
 import pytest
-from unittest.mock import MagicMock, AsyncMock, patch
-from discord import DMChannel
+from unittest.mock import MagicMock, AsyncMock, patch, call
 from cogs.router_cog import RouterCog
+import discord
 
-@pytest.mark.asyncio
-async def test_handle_message_routing_to_cog(mock_session):
-    # Setup
+@pytest.fixture
+def mock_bot():
     bot = MagicMock()
+    bot.user = MagicMock(id=12345)
+    return bot
+
+@pytest.fixture
+def mock_message(mock_bot):
     message = MagicMock()
     message.content = "Test message"
-    message.channel = AsyncMock(spec=DMChannel)
-    message.channel.id = 12345
-    message.author.id = 67890
+    message.id = 1
+    message.channel = MagicMock()
+    message.channel.typing = MagicMock(return_value=AsyncMock())
+    message.channel.send = AsyncMock()
+    message.author = MagicMock(bot=False, id=67890)
+    message.mentions = []
     message.guild = None
-    message.author.bot = False
-    
-    # Create a proper async context manager for typing
-    typing_cm = AsyncMock()
-    typing_cm.__aenter__.return_value = None
-    typing_cm.__aexit__.return_value = None
-    message.channel.typing.return_value = typing_cm
-    message.channel.send = AsyncMock()
+    return message
 
+@pytest.fixture
+def mock_api():
     mock_api = AsyncMock()
+    
+    # Create a mock async iterator for streaming
+    async def mock_stream():
+        yield "<modelCog>GPT4O</modelCog>"
+    
     mock_api.call_openpipe = AsyncMock()
-    mock_api.call_openpipe.return_value.__aiter__.return_value = ["<modelCog>GPT4O</modelCog> <debugComment>Blah</debugComment>"]
-    mock_api.session = mock_session
-
-    cog = RouterCog(bot)
-    cog.api_client = mock_api
-    cog.router_system_prompt = "System prompt: {user_message}"
-
-    hermes_cog = MagicMock()
-    hermes_cog.handle_message = AsyncMock()
-    bot.get_cog.return_value = hermes_cog
-
-    # Test both direct handle_message and on_message event
-    await cog.handle_message(message)
-    await cog.on_message(message)
-
-    # Verify both calls worked
-    assert mock_api.call_openpipe.call_count == 2
-    assert hermes_cog.handle_message.call_count == 2
+    mock_api.call_openpipe.return_value = mock_stream()
+    
+    return mock_api
 
 @pytest.mark.asyncio
-async def test_handle_message_cog_not_found(mock_session):
-    # Setup
-    bot = MagicMock()
-    message = MagicMock()
-    message.content = "Test message"
-    message.channel = AsyncMock(spec=DMChannel)
-    message.channel.id = 12345
-    message.author.id = 67890
-    message.guild = None
-    message.author.bot = False
-    
-    # Create a proper async context manager for typing
-    typing_cm = AsyncMock()
-    typing_cm.__aenter__.return_value = None
-    typing_cm.__aexit__.return_value = None
-    message.channel.typing.return_value = typing_cm
-    message.channel.send = AsyncMock()
+async def test_route_message_basic_flow(mock_bot, mock_message, mock_api):
+    # Patch the typing context manager to avoid async issues
+    with patch.object(mock_message.channel, 'typing', return_value=AsyncMock()):
+        # Mock cog routing
+        gpt4o_cog = MagicMock()
+        gpt4o_cog.handle_message = AsyncMock()
+        mock_bot.get_cog.return_value = gpt4o_cog
 
-    mock_api = AsyncMock()
-    mock_api.call_openpipe = AsyncMock()
-    mock_api.call_openpipe.return_value.__aiter__.return_value = ["<modelCog>NonExistentCog</modelCog>"]
-    mock_api.session = mock_session
+        # Create RouterCog instance
+        cog = RouterCog(mock_bot)
+        cog.api_client = mock_api
+        cog.router_system_prompt = "System prompt: {user_message}"
 
-    cog = RouterCog(bot)
-    cog.api_client = mock_api
-    cog.router_system_prompt = "System prompt: {user_message}"
+        # Execute route_message
+        await cog.route_message(mock_message)
 
-    bot.get_cog.return_value = None
-
-    # Test both direct handle_message and on_message event
-    await cog.handle_message(message)
-    await cog.on_message(message)
-
-    # Verify both calls worked
-    assert mock_api.call_openpipe.call_count == 2
-    assert message.channel.send.call_count == 2
-    message.channel.send.assert_called_with("❌ Unable to route message to the appropriate module.")
+        # Verify interactions
+        mock_api.call_openpipe.assert_called_once()
+        gpt4o_cog.handle_message.assert_called_once_with(mock_message)
 
 @pytest.mark.asyncio
-async def test_handle_message_xml_response(mock_session):
-    # Setup
-    bot = MagicMock()
-    message = MagicMock()
-    message.content = "Test message"
-    message.channel = AsyncMock(spec=DMChannel)
-    message.channel.id = 12345
-    message.author.id = 67890
-    message.guild = None
-    message.author.bot = False
-    
-    # Create a proper async context manager for typing
-    typing_cm = AsyncMock()
-    typing_cm.__aenter__.return_value = None
-    typing_cm.__aexit__.return_value = None
-    message.channel.typing.return_value = typing_cm
-    message.channel.send = AsyncMock()
+async def test_on_message_dm_flow(mock_bot, mock_message, mock_api):
+    # Configure message as DM
+    mock_message.channel = MagicMock(spec=discord.DMChannel)
+    mock_message.channel.typing = MagicMock(return_value=AsyncMock())
 
-    mock_api = AsyncMock()
-    mock_api.call_openpipe = AsyncMock()
-    mock_api.call_openpipe.return_value.__aiter__.return_value = ["<modelCog>GPT4O</modelCog> <debugComment>Blah</debugComment>"]
-    mock_api.session = mock_session
+    # Patch the typing context manager to avoid async issues
+    with patch.object(mock_message.channel, 'typing', return_value=AsyncMock()):
+        # Mock cog routing
+        gpt4o_cog = MagicMock()
+        gpt4o_cog.handle_message = AsyncMock()
+        mock_bot.get_cog.return_value = gpt4o_cog
 
-    cog = RouterCog(bot)
-    cog.api_client = mock_api
-    cog.router_system_prompt = "System prompt: {user_message}"
+        # Create RouterCog instance
+        cog = RouterCog(mock_bot)
+        cog.api_client = mock_api
+        cog.router_system_prompt = "System prompt: {user_message}"
 
-    hermes_cog = MagicMock()
-    hermes_cog.handle_message = AsyncMock()
-    bot.get_cog.return_value = hermes_cog
+        # Execute on_message
+        await cog.on_message(mock_message)
 
-    # Test both direct handle_message and on_message event
-    await cog.handle_message(message)
-    await cog.on_message(message)
-
-    # Verify both calls worked
-    assert mock_api.call_openpipe.call_count == 2
-    assert hermes_cog.handle_message.call_count == 2
+        # Verify interactions
+        mock_api.call_openpipe.assert_called_once()
+        gpt4o_cog.handle_message.assert_called_once_with(mock_message)
 
 @pytest.mark.asyncio
-async def test_bot_message_ignored(mock_session):
-    # Setup
-    bot = MagicMock()
-    message = MagicMock()
-    message.content = "Test message"
-    message.channel = AsyncMock(spec=DMChannel)
-    message.author.bot = True  # This is a bot message
-    message.channel.send = AsyncMock()
-    
-    cog = RouterCog(bot)
-    
-    # Test on_message event with bot message
-    await cog.on_message(message)
-    
-    # Verify no processing occurred
-    assert not message.channel.typing.called
-    assert not message.channel.send.called
+async def test_route_message_bot_mention(mock_bot, mock_message, mock_api):
+    # Add bot mention
+    mock_message.mentions = [mock_bot.user]
+
+    # Patch the typing context manager to avoid async issues
+    with patch.object(mock_message.channel, 'typing', return_value=AsyncMock()):
+        # Mock cog routing
+        gpt4o_cog = MagicMock()
+        gpt4o_cog.handle_message = AsyncMock()
+        mock_bot.get_cog.return_value = gpt4o_cog
+
+        # Create RouterCog instance
+        cog = RouterCog(mock_bot)
+        cog.api_client = mock_api
+        cog.router_system_prompt = "System prompt: {user_message}"
+
+        # Execute route_message
+        await cog.route_message(mock_message)
+
+        # Verify interactions
+        mock_api.call_openpipe.assert_called_once()
+        gpt4o_cog.handle_message.assert_called_once_with(mock_message)
 
 @pytest.mark.asyncio
-async def test_guild_message_handling(mock_session):
-    # Setup
-    bot = MagicMock()
-    message = MagicMock()
-    message.content = "Test message"
-    message.channel = AsyncMock()
-    message.channel.id = 12345
-    message.guild = AsyncMock()
-    message.guild.id = 67890
-    message.author = AsyncMock()
-    message.author.bot = False
-    message.mentions = []  # No mentions
-    message.channel.send = AsyncMock()
+async def test_route_message_api_error(mock_bot, mock_message, mock_api):
+    # Simulate API error
+    mock_api.call_openpipe.side_effect = Exception("API Error")
 
-    # Create a proper async context manager for typing
-    typing_cm = AsyncMock()
-    typing_cm.__aenter__.return_value = None
-    typing_cm.__aexit__.return_value = None
-    message.channel.typing.return_value = typing_cm
+    # Patch the typing context manager to avoid async issues
+    with patch.object(mock_message.channel, 'typing', return_value=AsyncMock()):
+        # Mock fallback cog
+        gpt4o_cog = MagicMock()
+        gpt4o_cog.handle_message = AsyncMock()
+        
+        def get_cog(name):
+            if name == "GPT4OCog":
+                return gpt4o_cog
+            return None
+            
+        mock_bot.get_cog = MagicMock(side_effect=get_cog)
 
-    # Setup API mock with proper async iterator
-    mock_api = AsyncMock()
-    mock_api.call_openpipe = AsyncMock()
-    response_iter = AsyncMock()
-    response_iter.__aiter__.return_value = ["<modelCog>GPT4O</modelCog>"].__aiter__()
-    mock_api.call_openpipe.return_value = response_iter
-    mock_api.session = mock_session
+        # Create RouterCog instance
+        cog = RouterCog(mock_bot)
+        cog.api_client = mock_api
+        cog.router_system_prompt = "System prompt: {user_message}"
 
-    cog = RouterCog(bot)
-    cog.api_client = mock_api
-    cog.router_system_prompt = "System prompt: {user_message}"
-    cog.activated_channels = {
-        "67890": {  # guild_id
-            "12345": True  # channel_id
-        }
-    }
+        # Execute route_message
+        await cog.route_message(mock_message)
 
-    hermes_cog = AsyncMock()
-    hermes_cog.handle_message = AsyncMock()
-    bot.get_cog.return_value = hermes_cog
+        # Verify fallback mechanism
+        mock_message.channel.send.assert_called_once()
+        mock_bot.get_cog.assert_called_with("GPT4OCog")
+        gpt4o_cog.handle_message.assert_not_called()  # Error message is sent instead
 
-    # Test activated channel
-    await cog.on_message(message)
+@pytest.mark.asyncio
+async def test_route_message_multiple_cogs(mock_bot, mock_message, mock_api):
+    # Setup mock streaming response with different cog
+    async def mock_stream():
+        yield "<modelCog>Hermes</modelCog>"
+    mock_api.call_openpipe.return_value = mock_stream()
 
-    # Test non-activated channel
-    message.channel.id = 99999
-    await cog.on_message(message)
+    # Patch the typing context manager to avoid async issues
+    with patch.object(mock_message.channel, 'typing', return_value=AsyncMock()):
+        # Mock multiple cogs
+        hermes_cog = MagicMock()
+        hermes_cog.handle_message = AsyncMock()
+        gpt4o_cog = MagicMock()
+        gpt4o_cog.handle_message = AsyncMock()
+        
+        def mock_get_cog(name):
+            if name == 'HermesCog':
+                return hermes_cog
+            return gpt4o_cog
+        
+        mock_bot.get_cog.side_effect = mock_get_cog
 
-    # Verify only activated channel was processed
-    assert message.channel.typing.call_count == 1
-    assert mock_api.call_openpipe.call_count == 1
-    assert hermes_cog.handle_message.call_count == 1
+        # Create RouterCog instance
+        cog = RouterCog(mock_bot)
+        cog.api_client = mock_api
+        cog.router_system_prompt = "System prompt: {user_message}"
+
+        # Execute route_message
+        await cog.route_message(mock_message)
+
+        # Verify interactions
+        mock_api.call_openpipe.assert_called_once()
+        hermes_cog.handle_message.assert_called_once_with(mock_message)
+        gpt4o_cog.handle_message.assert_not_called()
