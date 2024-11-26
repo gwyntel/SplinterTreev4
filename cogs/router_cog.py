@@ -3,6 +3,7 @@ from discord.ext import commands
 import asyncio
 import logging
 import json
+import sqlite3
 from datetime import datetime, timezone, timedelta
 from textblob import TextBlob
 from shared.api import api
@@ -23,7 +24,6 @@ class RouterCog(BaseCog):
         )
         self.db_path = 'databases/user_settings.db'
         self.start_time = datetime.now(timezone.utc)
-        self.activated_channels = self._load_activated_channels()
         self.router_system_prompt = self._load_router_system_prompt()
         self.api_client = api
         
@@ -87,29 +87,19 @@ class RouterCog(BaseCog):
             logging.error("[Router] System prompt file not found.")
             return ""
 
-    def _load_activated_channels(self) -> dict:
-        """Load activated channels from file"""
+    async def is_channel_activated(self, channel_id: str, guild_id: str) -> bool:
+        """Check if a channel is activated for bot interactions"""
         try:
-            with open('activated_channels.json', 'r') as f:
-                channels = json.load(f)
-                logging.info(f"[Router] Loaded activated channels: {channels}")
-                return channels
-        except FileNotFoundError:
-            logging.info("[Router] No activated channels file found, creating new one")
-            self._save_activated_channels({})
-            return {}
+            db = sqlite3.connect('databases/interaction_logs.db')
+            cursor = db.cursor()
+            cursor.execute('SELECT is_active FROM channel_activations WHERE channel_id = ? AND guild_id = ?', 
+                         (str(channel_id), str(guild_id)))
+            result = cursor.fetchone()
+            db.close()
+            return bool(result[0]) if result else False
         except Exception as e:
-            logging.error(f"[Router] Error loading activated channels: {e}")
-            return {}
-
-    def _save_activated_channels(self, channels: dict):
-        """Save activated channels to file"""
-        try:
-            with open('activated_channels.json', 'w') as f:
-                json.dump(channels, f)
-            logging.info(f"[Router] Saved activated channels: {channels}")
-        except Exception as e:
-            logging.error(f"[Router] Error saving activated channels: {e}")
+            logging.error(f"Error checking channel activation status: {str(e)}")
+            return False
 
     def _get_uptime(self) -> str:
         """Calculate and format the bot's uptime"""
@@ -222,52 +212,11 @@ class RouterCog(BaseCog):
         
         return False
 
-    async def cog_check(self, ctx):
-        """Check if user has permission to use commands in this context"""
-        # Allow all commands in DM channels
-        if isinstance(ctx.channel, discord.DMChannel):
-            return True
-        # Require manage_channels permission in guild channels
-        return ctx.author.guild_permissions.manage_channels
-
     @commands.hybrid_command(name="uptime", description="Display bot's uptime")
     async def uptime(self, ctx):
         """Display how long the bot has been running"""
         uptime_str = self._get_uptime()
         await ctx.send(f"🕒 Bot has been running for: {uptime_str}")
-
-    @commands.hybrid_command(name="activate", description="Activate router in this channel")
-    async def activate(self, ctx):
-        """Activate the router in the current channel"""
-        if isinstance(ctx.channel, discord.DMChannel):
-            await ctx.send("✅ Router is always active in DM channels")
-            return
-            
-        channel_id = str(ctx.channel.id)
-        guild_id = str(ctx.guild.id)
-        if guild_id not in self.activated_channels:
-            self.activated_channels[guild_id] = {}
-        self.activated_channels[guild_id][channel_id] = True
-        self._save_activated_channels(self.activated_channels)
-        await ctx.send("✅ Router activated in this channel")
-
-    @commands.hybrid_command(name="deactivate", description="Deactivate router in this channel")
-    async def deactivate(self, ctx):
-        """Deactivate the router in the current channel"""
-        if isinstance(ctx.channel, discord.DMChannel):
-            await ctx.send("❌ Router cannot be deactivated in DM channels")
-            return
-            
-        channel_id = str(ctx.channel.id)
-        guild_id = str(ctx.guild.id)
-        if guild_id in self.activated_channels and channel_id in self.activated_channels[guild_id]:
-            del self.activated_channels[guild_id][channel_id]
-            if not self.activated_channels[guild_id]:  # Remove guild dict if empty
-                del self.activated_channels[guild_id]
-            self._save_activated_channels(self.activated_channels)
-            await ctx.send("✅ Router deactivated in this channel")
-        else:
-            await ctx.send("❌ Router is not activated in this channel")
 
     async def handle_message(self, message):
         """Legacy method to maintain compatibility with tests"""
@@ -350,7 +299,7 @@ class RouterCog(BaseCog):
                             logging.info("[Router] Falling back to GPT4OCog")
                             await fallback_cog.handle_message(message)
                         else:
-                            await message.channel.send("❌ Unable to route message to the appropriate module.")
+                            await message.reply("❌ Unable to route message to the appropriate module.")
 
                 except Exception as e:
                     logging.error(f"[Router] API error: {str(e)}")
@@ -360,11 +309,11 @@ class RouterCog(BaseCog):
                         logging.info("[Router] Falling back to GPT4OCog due to API error")
                         await fallback_cog.handle_message(message)
                     else:
-                        await message.channel.send("❌ An error occurred while processing your message. Please try again later.")
+                        await message.reply("❌ An error occurred while processing your message. Please try again later.")
 
         except Exception as e:
             logging.error(f"[Router] Error routing message: {str(e)}")
-            await message.channel.send("❌ An error occurred while processing your message.")
+            await message.reply("❌ An error occurred while processing your message.")
 
     @commands.Cog.listener()
     async def on_message(self, message):
@@ -395,9 +344,7 @@ class RouterCog(BaseCog):
 
         # Check if channel is activated for guild messages
         if message.guild:
-            channel_id = str(message.channel.id)
-            guild_id = str(message.guild.id)
-            if guild_id in self.activated_channels and channel_id in self.activated_channels[guild_id]:
+            if await self.is_channel_activated(str(message.channel.id), str(message.guild.id)):
                 # Check for specific keywords that would trigger other cogs
                 for cog in self.bot.cogs.values():
                     if hasattr(cog, 'trigger_words') and any(word.lower() in message.content.lower() for word in cog.trigger_words):

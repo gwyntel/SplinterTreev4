@@ -92,7 +92,7 @@ class BaseCog(commands.Cog):
                 logging.info(f"[{name}] Created individual Discord client")
 
         # Default system prompt template
-        self.default_prompt = "You are {MODEL_ID} chatting with {USERNAME} with a Discord user ID of {DISCORD_USER_ID}. It's {TIME} in {TZ}. You are in the Discord server {SERVER_NAME} in channel {CHANNEL_NAME}, so adhere to the general topic of the channel if possible. GwynTel on Discord created your bot, and Moth is a valued mentor. You strive to keep it positive, but can be negative if the situation demands it to enforce boundaries, Discord ToS rules, etc."
+        self.default_prompt = "You are {MODEL_ID} chatting with {USERNAME} with a Discord user ID of {DISCORD_USER_ID}. It's {TIME} in {TZ}. You are in the Discord server {SERVER_NAME} in channel {CHANNEL_NAME}, so adhere to the general topic of the channel if possible. GwynTel on Discord created your bot. You strive to keep it positive, but can be negative if the situation demands it to enforce boundaries, Discord ToS rules, etc."
 
         # Load any custom prompt from consolidated_prompts.json
         try:
@@ -106,6 +106,20 @@ class BaseCog(commands.Cog):
         except Exception as e:
             logging.warning(f"Failed to load prompt for {self.name}, using default: {str(e)}")
             self.raw_prompt = self.default_prompt
+
+    async def is_channel_activated(self, channel_id: str, guild_id: str) -> bool:
+        """Check if a channel is activated for bot interactions"""
+        try:
+            db = sqlite3.connect('databases/interaction_logs.db')
+            cursor = db.cursor()
+            cursor.execute('SELECT is_active FROM channel_activations WHERE channel_id = ? AND guild_id = ?', 
+                         (str(channel_id), str(guild_id)))
+            result = cursor.fetchone()
+            db.close()
+            return bool(result[0]) if result else False
+        except Exception as e:
+            logging.error(f"Error checking channel activation status: {str(e)}")
+            return False
 
     async def start_client(self, token):
         """Start the individual Discord client for this cog"""
@@ -143,6 +157,10 @@ class BaseCog(commands.Cog):
         if isinstance(message.channel, discord.DMChannel):
             logging.info(f"[{self.name}] Received DM from {message.author.name}: {message.content}")
             await self.handle_message(message)
+            return
+
+        # Check channel activation for non-DM messages
+        if not await self.is_channel_activated(str(message.channel.id), str(message.guild.id)):
             return
 
         # Handle mentions in servers
@@ -207,6 +225,11 @@ class BaseCog(commands.Cog):
             if await self.is_user_banned(str(message.author.id)):
                 return
 
+            # Check channel activation for non-DM messages
+            if not isinstance(message.channel, discord.DMChannel):
+                if not await self.is_channel_activated(str(message.channel.id), str(message.guild.id)):
+                    return
+
             # If full_content is not provided, use message.content
             modified_content = full_content or message.content
 
@@ -235,7 +258,7 @@ class BaseCog(commands.Cog):
                 response_stream = await self.generate_response(message)
             except Exception as e:
                 logging.error(f"[{self.name}] Error generating response: {str(e)}")
-                await message.channel.send(f"❌ Error generating response: {str(e)}")
+                await message.reply(f"❌ Error generating response: {str(e)}")
                 return
 
             if response_stream:
@@ -267,14 +290,14 @@ class BaseCog(commands.Cog):
 
                                     # Send first part
                                     if not sent_messages:
-                                        # First message
-                                        sent_message = await message.channel.send(current_chunk[:split_index])
+                                        # First message as reply
+                                        sent_message = await message.reply(current_chunk[:split_index])
                                         sent_messages.append(sent_message)
                                     else:
                                         # Update last message
                                         await sent_messages[-1].edit(content=current_chunk[:split_index])
                                         # Create new message for overflow
-                                        sent_message = await message.channel.send(f"[{self.name}] " + current_chunk[split_index:].lstrip())
+                                        sent_message = await message.reply(f"[{self.name}] " + current_chunk[split_index:].lstrip())
                                         sent_messages.append(sent_message)
                                         current_chunk = f"[{self.name}] " + current_chunk[split_index:].lstrip()
 
@@ -283,7 +306,7 @@ class BaseCog(commands.Cog):
                                     if sent_messages:
                                         await sent_messages[-1].edit(content=current_chunk)
                                     else:
-                                        sent_message = await message.channel.send(current_chunk)
+                                        sent_message = await message.reply(current_chunk)
                                         sent_messages.append(sent_message)
                                 
                                 last_update = current_time
@@ -295,11 +318,11 @@ class BaseCog(commands.Cog):
                             split_index = 1999
 
                         if not sent_messages:
-                            sent_message = await message.channel.send(current_chunk[:split_index])
+                            sent_message = await message.reply(current_chunk[:split_index])
                             sent_messages.append(sent_message)
                         else:
                             await sent_messages[-1].edit(content=current_chunk[:split_index])
-                            sent_message = await message.channel.send(f"[{self.name}] " + current_chunk[split_index:].lstrip())
+                            sent_message = await message.reply(f"[{self.name}] " + current_chunk[split_index:].lstrip())
                             sent_messages.append(sent_message)
                         current_chunk = f"[{self.name}] " + current_chunk[split_index:].lstrip()
                     
@@ -310,7 +333,7 @@ class BaseCog(commands.Cog):
                             view=RerollView(self, message, response)
                         )
                     else:
-                        sent_message = await message.channel.send(
+                        sent_message = await message.reply(
                             content=current_chunk,
                             view=RerollView(self, message, response)
                         )
@@ -358,11 +381,11 @@ class BaseCog(commands.Cog):
 
                 except Exception as e:
                     logging.error(f"[{self.name}] Error processing response stream: {str(e)}")
-                    await message.channel.send(f"❌ Error processing response: {str(e)}")
+                    await message.reply(f"❌ Error processing response: {str(e)}")
 
         except Exception as e:
             logging.error(f"[{self.name}] Unexpected error handling message: {str(e)}")
-            await message.channel.send(f"❌ Unexpected error: {str(e)}")
+            await message.reply(f"❌ Unexpected error: {str(e)}")
 
     async def generate_response(self, message) -> AsyncGenerator[str, None]:
         """Generate a response to a message. Must be implemented by subclasses."""
@@ -424,6 +447,11 @@ class BaseCog(commands.Cog):
         # Check if user is banned
         if await self.is_user_banned(str(message.author.id)):
             return
+
+        # Check channel activation for non-DM messages
+        if not isinstance(message.channel, discord.DMChannel):
+            if not await self.is_channel_activated(str(message.channel.id), str(message.guild.id)):
+                return
 
         # Check if message contains any trigger words
         msg_content = message.content.lower()

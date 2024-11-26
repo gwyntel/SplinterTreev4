@@ -60,6 +60,15 @@ CREATE TABLE IF NOT EXISTS banned_users (
     reason TEXT DEFAULT 'opt-out'
 );
 
+-- Channel activations storage
+CREATE TABLE IF NOT EXISTS channel_activations (
+    channel_id TEXT PRIMARY KEY,
+    guild_id TEXT NOT NULL,
+    activated_by TEXT NOT NULL,
+    activated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE
+);
+
 -- Create indexes for better query performance
 CREATE INDEX IF NOT EXISTS idx_messages_channel ON messages(channel_id);
 CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp);
@@ -72,3 +81,4 @@ CREATE INDEX IF NOT EXISTS idx_logs_requested_at ON logs(requested_at);
 CREATE INDEX IF NOT EXISTS idx_logs_status_code ON logs(status_code);
 CREATE INDEX IF NOT EXISTS idx_logs_user_id ON logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_logs_guild_id ON logs(guild_id);
+CREATE INDEX IF NOT EXISTS idx_channel_activations_guild ON channel_activations(guild_id);

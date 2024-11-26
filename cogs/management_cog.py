@@ -51,6 +51,66 @@ class ManagementCog(BaseCog):
             logging.error(f"Error banning user: {str(e)}")
             return False
 
+    async def activate_channel(self, channel_id: str, guild_id: str, user_id: str) -> bool:
+        """Activate bot responses in a channel"""
+        try:
+            db = sqlite3.connect('databases/interaction_logs.db')
+            cursor = db.cursor()
+            cursor.execute('''
+                INSERT OR REPLACE INTO channel_activations 
+                (channel_id, guild_id, activated_by, is_active) 
+                VALUES (?, ?, ?, TRUE)
+            ''', (str(channel_id), str(guild_id), str(user_id)))
+            db.commit()
+            db.close()
+            return True
+        except Exception as e:
+            logging.error(f"Error activating channel: {str(e)}")
+            return False
+
+    async def deactivate_channel(self, channel_id: str, guild_id: str, user_id: str) -> bool:
+        """Deactivate bot responses in a channel"""
+        try:
+            db = sqlite3.connect('databases/interaction_logs.db')
+            cursor = db.cursor()
+            cursor.execute('''
+                INSERT OR REPLACE INTO channel_activations 
+                (channel_id, guild_id, activated_by, is_active) 
+                VALUES (?, ?, ?, FALSE)
+            ''', (str(channel_id), str(guild_id), str(user_id)))
+            db.commit()
+            db.close()
+            return True
+        except Exception as e:
+            logging.error(f"Error deactivating channel: {str(e)}")
+            return False
+
+    @commands.hybrid_command(name="activate", description="Activate bot responses in this channel")
+    @commands.has_permissions(administrator=True)
+    async def activate(self, ctx):
+        """Activate bot responses in the current channel"""
+        try:
+            if await self.activate_channel(str(ctx.channel.id), str(ctx.guild.id), str(ctx.author.id)):
+                await ctx.send(f"✅ Bot responses have been activated in {ctx.channel.mention}", ephemeral=True)
+            else:
+                await ctx.send("❌ Failed to activate bot responses. Please try again later.", ephemeral=True)
+        except Exception as e:
+            logging.error(f"Error in activate command: {str(e)}")
+            await ctx.send("❌ An error occurred while processing your request.", ephemeral=True)
+
+    @commands.hybrid_command(name="deactivate", description="Deactivate bot responses in this channel")
+    @commands.has_permissions(administrator=True)
+    async def deactivate(self, ctx):
+        """Deactivate bot responses in the current channel"""
+        try:
+            if await self.deactivate_channel(str(ctx.channel.id), str(ctx.guild.id), str(ctx.author.id)):
+                await ctx.send(f"✅ Bot responses have been deactivated in {ctx.channel.mention}", ephemeral=True)
+            else:
+                await ctx.send("❌ Failed to deactivate bot responses. Please try again later.", ephemeral=True)
+        except Exception as e:
+            logging.error(f"Error in deactivate command: {str(e)}")
+            await ctx.send("❌ An error occurred while processing your request.", ephemeral=True)
+
     @commands.hybrid_command(name="optout", description="Opt out of all bot interactions")
     async def optout(self, ctx):
         """Opt out of all bot interactions"""
@@ -61,6 +121,16 @@ class ManagementCog(BaseCog):
                 await ctx.send("❌ Failed to opt out. Please try again later.", ephemeral=True)
         except Exception as e:
             logging.error(f"Error in optout command: {str(e)}")
+            await ctx.send("❌ An error occurred while processing your request.", ephemeral=True)
+
+    @activate.error
+    @deactivate.error
+    async def admin_command_error(self, ctx, error):
+        """Handle errors for admin commands"""
+        if isinstance(error, commands.MissingPermissions):
+            await ctx.send("❌ You need administrator permissions to use this command.", ephemeral=True)
+        else:
+            logging.error(f"Error in admin command: {str(error)}")
             await ctx.send("❌ An error occurred while processing your request.", ephemeral=True)
 
     @commands.Cog.listener()
