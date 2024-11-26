@@ -5,7 +5,6 @@ import json
 import sqlite3
 import os
 from datetime import datetime
-from typing import Optional
 import aiohttp
 import asyncio
 from config.webhook_config import load_webhooks, MAX_RETRIES, WEBHOOK_TIMEOUT, DEBUG_LOGGING
@@ -71,7 +70,7 @@ class HelpCog(commands.Cog, name="Help"):
         prompt="The new system prompt to use"
     )
     async def set_system_prompt(self, ctx, agent: str, *, prompt: str):
-        """Set a custom system prompt for an AI agent. Use /set_system_prompt <agent> <prompt> or !set_system_prompt <agent> <prompt>"""
+        """Set a custom system prompt for an AI agent."""
         try:
             # Load current prompts
             prompts = self._load_system_prompts()
@@ -106,7 +105,7 @@ class HelpCog(commands.Cog, name="Help"):
     @commands.has_permissions(administrator=True)
     @discord.app_commands.describe(agent="The AI agent to reset the prompt for")
     async def reset_system_prompt(self, ctx, agent: str):
-        """Reset an AI agent's system prompt to default. Use /reset_system_prompt <agent> or !reset_system_prompt <agent>"""
+        """Reset an AI agent's system prompt to its default value."""
         try:
             # Load current prompts
             prompts = self._load_system_prompts()
@@ -244,7 +243,7 @@ All commands support both slash (/) and prefix (!) formats:
 • `/help` - Show this help message
 • `/listmodels` - Show all available models (simple list)
 • `/list_agents` - Show all available agents with detailed info
-• `/uptime` - Show how long the bot has been running
+• `/show_uptime` - Show how long the bot has been running
 • `/set_system_prompt <agent> <prompt>` - Set a custom system prompt for an AI agent (Admin only)
 • `/reset_system_prompt <agent>` - Reset an AI agent's system prompt to default (Admin only)
 • `/setcontext <size>` - Set the number of previous messages to include in context (Admin only)
@@ -309,9 +308,9 @@ When setting custom system prompts, you can use these variables:
             logging.error(f"[Help] Error sending agent list: {str(e)}", exc_info=True)
             await ctx.send("An error occurred while fetching the agent list. Please try again later.")
 
-    @commands.hybrid_command(name="uptime", with_app_command=True)
-    async def uptime_command(self, ctx):
-        """Show how long the bot has been running. Use /uptime or !uptime"""
+    @commands.hybrid_command(name="show_uptime", with_app_command=True)
+    async def show_uptime_command(self, ctx):
+        """Show how long the bot has been running. Use /show_uptime or !show_uptime"""
         try:
             uptime = get_uptime()
             await ctx.send(f"🕒 Bot has been running for: {uptime}")

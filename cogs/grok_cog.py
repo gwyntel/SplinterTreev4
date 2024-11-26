@@ -11,7 +11,7 @@ class GrokCog(BaseCog):
             name="Grok",
             nickname="Grok",
             trigger_words=['grok', 'xAI'],
-            model="openpipe:openrouter/x-ai/grok-beta",
+            model="openpipe:xai/grok-beta",
             provider="openpipe",
             prompt_file="grok_prompts",
             supports_vision=False
