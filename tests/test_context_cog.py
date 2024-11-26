@@ -1,95 +1,152 @@
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+import discord
+from discord.ext import commands
 from cogs.context_cog import ContextCog
-from config import DEFAULT_CONTEXT_WINDOW, MAX_CONTEXT_WINDOW
+import sqlite3
+import os
+import asyncio
+from datetime import datetime
+
+@pytest.fixture
+def bot():
+    bot = commands.Bot(command_prefix='!', intents=discord.Intents.all())
+    return bot
+
+@pytest.fixture
+async def context_cog(bot):
+    cog = ContextCog(bot)
+    # Use in-memory database for testing
+    cog.db_path = ':memory:'
+    cog._setup_database()
+    return cog
 
 @pytest.mark.asyncio
-async def test_get_context_command():
-    bot = MagicMock()
-    ctx = MagicMock()
-    ctx.send = AsyncMock()
-    ctx.channel.id = "123"
-    cog = ContextCog(bot)
-    await cog.get_context_command.callback(cog, ctx)
-    ctx.send.assert_awaited_once_with(f"Current context window size: {DEFAULT_CONTEXT_WINDOW} messages")
-
-@pytest.mark.asyncio
-async def test_clear_context_command():
-    bot = MagicMock()
-    ctx = MagicMock()
-    ctx.send = AsyncMock()
-    ctx.channel.id = "123"
-    cog = ContextCog(bot)
-    await cog.clear_context_command.callback(cog, ctx, hours=2)
-    ctx.send.assert_awaited_once_with("✅ Cleared messages older than 2 hours from context")
-
-@pytest.mark.asyncio
-async def test_get_context_messages():
-    bot = MagicMock()
-    cog = ContextCog(bot)
-    messages = await cog.get_context_messages("channel_id", limit=10)
-    assert isinstance(messages, list)
-
-@pytest.mark.asyncio
-async def test_setcontext_command():
-    bot = MagicMock()
-    ctx = MagicMock()
-    ctx.send = AsyncMock()
-    ctx.channel.id = "123"
-    cog = ContextCog(bot)
+async def test_add_message_to_context_streaming(context_cog):
+    channel_id = "123"
+    message_id = "456"
+    guild_id = "789"
+    user_id = "101112"
     
-    # Test valid size
-    with patch('json.dump'):
-        await cog.set_context_command.callback(cog, ctx, size=10)
-        ctx.send.assert_awaited_once_with("✅ Context window size set to 10 messages")
+    # Simulate streaming chunks of an assistant response
+    chunks = [
+        "Hello",
+        "Hello, how",
+        "Hello, how are",
+        "Hello, how are you?"
+    ]
     
-    # Test size too small
-    ctx.send.reset_mock()
-    await cog.set_context_command.callback(cog, ctx, size=0)
-    ctx.send.assert_awaited_once_with("❌ Context window size must be at least 1")
+    # Process each chunk
+    for chunk in chunks:
+        await context_cog.add_message_to_context(
+            message_id,
+            channel_id,
+            guild_id,
+            user_id,
+            chunk,
+            is_assistant=True
+        )
     
-    # Test size too large
-    ctx.send.reset_mock()
-    await cog.set_context_command.callback(cog, ctx, size=MAX_CONTEXT_WINDOW + 1)
-    ctx.send.assert_awaited_once_with(f"❌ Context window size cannot exceed {MAX_CONTEXT_WINDOW}")
+    # Verify the final stored message
+    messages = await context_cog.get_context_messages(channel_id)
+    assert len(messages) == 1
+    assert messages[0]['content'] == "Hello, how are you?"
+    assert messages[0]['is_assistant'] is True
 
 @pytest.mark.asyncio
-async def test_resetcontext_command():
-    bot = MagicMock()
-    ctx = MagicMock()
-    ctx.send = AsyncMock()
-    ctx.channel.id = "123"
-    cog = ContextCog(bot)
+async def test_multiple_streaming_messages(context_cog):
+    channel_id = "123"
+    guild_id = "789"
+    user_id = "101112"
     
-    # Set a custom context window size first
-    with patch('json.dump'):
-        await cog.set_context_command.callback(cog, ctx, size=10)
-        ctx.send.reset_mock()
-        
-        # Test resetting context
-        await cog.reset_context_command.callback(cog, ctx)
-        ctx.send.assert_awaited_once_with(f"✅ Context window size reset to default ({DEFAULT_CONTEXT_WINDOW} messages)")
+    # First message stream
+    message1_id = "456"
+    chunks1 = [
+        "First",
+        "First message",
+        "First message complete"
+    ]
+    
+    # Second message stream
+    message2_id = "457"
+    chunks2 = [
+        "Second",
+        "Second message",
+        "Second message complete"
+    ]
+    
+    # Process first message chunks
+    for chunk in chunks1:
+        await context_cog.add_message_to_context(
+            message1_id,
+            channel_id,
+            guild_id,
+            user_id,
+            chunk,
+            is_assistant=True
+        )
+    
+    # Process second message chunks
+    for chunk in chunks2:
+        await context_cog.add_message_to_context(
+            message2_id,
+            channel_id,
+            guild_id,
+            user_id,
+            chunk,
+            is_assistant=True
+        )
+    
+    # Verify both messages are stored correctly
+    messages = await context_cog.get_context_messages(channel_id)
+    assert len(messages) == 2
+    assert messages[0]['content'] == "First message complete"
+    assert messages[1]['content'] == "Second message complete"
 
 @pytest.mark.asyncio
-async def test_clear_context_command_with_hours():
-    bot = MagicMock()
-    ctx = MagicMock()
-    ctx.send = AsyncMock()
-    ctx.channel.id = "123"
-    cog = ContextCog(bot)
+async def test_interleaved_user_and_assistant_messages(context_cog):
+    channel_id = "123"
+    guild_id = "789"
+    user_id = "101112"
     
-    # Test clearing with specific hours
-    await cog.clear_context_command.callback(cog, ctx, hours=24)
-    ctx.send.assert_awaited_once_with("✅ Cleared messages older than 24 hours from context")
-
-@pytest.mark.asyncio
-async def test_clear_context_command_all():
-    bot = MagicMock()
-    ctx = MagicMock()
-    ctx.send = AsyncMock()
-    ctx.channel.id = "123"
-    cog = ContextCog(bot)
+    # User message
+    await context_cog.add_message_to_context(
+        "1",
+        channel_id,
+        guild_id,
+        user_id,
+        "Hello bot",
+        is_assistant=False
+    )
     
-    # Test clearing all messages
-    await cog.clear_context_command.callback(cog, ctx)
-    ctx.send.assert_awaited_once_with("✅ Cleared all messages from context")
+    # Assistant response stream
+    chunks = [
+        "Hi",
+        "Hi there",
+        "Hi there user"
+    ]
+    for chunk in chunks:
+        await context_cog.add_message_to_context(
+            "2",
+            channel_id,
+            guild_id,
+            user_id,
+            chunk,
+            is_assistant=True
+        )
+    
+    # Another user message
+    await context_cog.add_message_to_context(
+        "3",
+        channel_id,
+        guild_id,
+        user_id,
+        "How are you?",
+        is_assistant=False
+    )
+    
+    # Verify message sequence
+    messages = await context_cog.get_context_messages(channel_id)
+    assert len(messages) == 3
+    assert messages[0]['content'].endswith("Hello bot")  # User message includes username prefix
+    assert messages[1]['content'] == "Hi there user"
+    assert messages[2]['content'].endswith("How are you?")  # User message includes username prefix

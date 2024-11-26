@@ -206,8 +206,12 @@ class ContextCog(commands.Cog):
                 return
 
             if is_assistant:
-                if channel_id not in self.current_stream or message_id != self.current_stream[channel_id]['message_id']:
-                    if channel_id in self.current_stream:
+                if channel_id not in self.current_stream:
+                    self.current_stream[channel_id] = {'content': '', 'message_id': message_id}
+                
+                if message_id != self.current_stream[channel_id]['message_id']:
+                    # Store the previous complete message before starting a new one
+                    if self.current_stream[channel_id]['content']:
                         await self._store_message(
                             self.current_stream[channel_id]['message_id'],
                             channel_id,
@@ -218,9 +222,12 @@ class ContextCog(commands.Cog):
                             persona_name,
                             emotion
                         )
+                    # Start a new message stream
                     self.current_stream[channel_id] = {'content': content, 'message_id': message_id}
                 else:
-                    self.current_stream[channel_id]['content'] += content
+                    # Append to existing message stream
+                    self.current_stream[channel_id]['content'] = content
+                    # Store the updated complete message
                     await self._store_message(
                         message_id,
                         channel_id,
