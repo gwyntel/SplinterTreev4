@@ -100,15 +100,38 @@ class API:
         headers = {
             'Helicone-Auth': f'Bearer {HELICONE_API_KEY}',
             'Helicone-Cache-Enabled': 'true',
-            'Helicone-Target-Url': 'https://api.openpipe.ai/api/v1',
-            'Helicone-Property-Source': provider if provider else 'unknown',
-            'Helicone-Property-User-Id': str(user_id) if user_id else 'unknown',
-            'Helicone-Property-Guild-Id': str(guild_id) if guild_id else 'unknown',
-            'Helicone-Property-Prompt-File': str(prompt_file) if prompt_file else 'unknown',
-            'Helicone-Property-Model-Cog': str(model_cog) if model_cog else 'unknown',
-            'HTTP-Referer': 'https://github.com/gwyntel/SplinterTreev4',
-            'X-Title': 'SplinterTree by GwynTel'
+            'Helicone-Target-Url': OPENPIPE_API_URL  # OpenPipe is our production proxy
         }
+
+        # Set provider-specific target path prefix
+        if provider and provider.startswith("openpipe:"):
+            provider_type = provider.split(":")[1]  # Extract xai, openrouter, or infermatic
+            if provider_type == "xai":
+                headers['Helicone-OpenPipe-Path'] = '/xai/v1'
+            elif provider_type == "openrouter":
+                headers['Helicone-OpenPipe-Path'] = '/openrouter/v1'
+            elif provider_type == "infermatic":
+                headers['Helicone-OpenPipe-Path'] = '/infermatic/v1'
+            headers['Helicone-Target-Provider'] = 'OpenPipe'
+        else:
+            # Default to xai path if no specific provider given
+            headers['Helicone-OpenPipe-Path'] = '/xai/v1'
+            headers['Helicone-Target-Provider'] = 'OpenPipe'
+
+        # Add custom properties
+        if user_id:
+            headers['Helicone-Property-User-Id'] = str(user_id)
+        if guild_id:
+            headers['Helicone-Property-Guild-Id'] = str(guild_id)
+        if prompt_file:
+            headers['Helicone-Property-Prompt-File'] = str(prompt_file)
+        if model_cog:
+            headers['Helicone-Property-Model-Cog'] = str(model_cog)
+
+        # Add application metadata
+        headers['HTTP-Referer'] = 'https://github.com/gwyntel/SplinterTreev4'
+        headers['X-Title'] = 'SplinterTree by GwynTel'
+
         return headers
 
     async def setup(self):
@@ -116,60 +139,33 @@ class API:
         if self.session is None:
             # Initialize aiohttp session with custom headers and timeout
             timeout = aiohttp.ClientTimeout(total=30, connect=10, sock_read=10)
-            self.session = aiohttp.ClientSession(
-                headers={
-                    'Authorization': f'Bearer {OPENROUTER_API_KEY}',
-                    'Helicone-Auth': f'Bearer {HELICONE_API_KEY}',
-                    'Helicone-Target-Url': 'https://api.openpipe.ai/api/v1',
-                    'HTTP-Referer': 'https://github.com/gwyntel/SplinterTreev4',
-                    'X-Title': 'SplinterTree by GwynTel'
-                },
-                timeout=timeout
-            )
+            self.session = aiohttp.ClientSession(timeout=timeout)
             
-            # Initialize OpenAI client with Helicone Gateway URL
+            # Initialize OpenAI client through OpenPipe proxy
             self.openai_client = AsyncOpenAI(
-                api_key=OPENROUTER_API_KEY,
+                api_key=OPENPIPE_API_KEY,
                 base_url="https://gateway.helicone.ai/v1",
-                default_headers={
-                    'Authorization': f'Bearer {OPENROUTER_API_KEY}',
-                    'Helicone-Auth': f'Bearer {HELICONE_API_KEY}',
-                    'Helicone-Target-Url': 'https://api.openpipe.ai/api/v1',
-                    'HTTP-Referer': 'https://github.com/gwyntel/SplinterTreev4',
-                    'X-Title': 'SplinterTree by GwynTel',
-                },
+                default_headers=self._get_helicone_headers(provider="openpipe:xai"),
                 timeout=30.0
             )
 
-            # Initialize OpenPipe client with Helicone integration
+            # Initialize OpenPipe client
             self.openpipe_client = OpenPipeAI(
                 api_key=OPENPIPE_API_KEY,
                 base_url="https://gateway.helicone.ai/v1",
-                default_headers={
-                    'Authorization': f'Bearer {OPENPIPE_API_KEY}',
-                    'Helicone-Auth': f'Bearer {HELICONE_API_KEY}',
-                    'Helicone-Target-Url': 'https://api.openpipe.ai/api/v1',
-                    'HTTP-Referer': 'https://github.com/gwyntel/SplinterTreev4',
-                    'X-Title': 'SplinterTree by GwynTel'
-                },
+                default_headers=self._get_helicone_headers(provider="openpipe:openrouter"),
                 openpipe={
                     "fallback": {
-                        "model": "gpt-4-turbo-preview"  # Fallback to OpenAI if needed
+                        "model": "gpt-4-turbo-preview"
                     }
                 }
             )
 
-            # Initialize Infermatic client
+            # Initialize Infermatic client through OpenPipe proxy
             self.infermatic_client = AsyncOpenAI(
-                api_key=HELICONE_API_KEY,
+                api_key=OPENPIPE_API_KEY,
                 base_url="https://gateway.helicone.ai/v1",
-                default_headers={
-                    'Authorization': f'Bearer {HELICONE_API_KEY}',
-                    'Helicone-Auth': f'Bearer {HELICONE_API_KEY}',
-                    'Helicone-Target-Url': 'https://api.openpipe.ai/api/v1',
-                    'HTTP-Referer': 'https://github.com/gwyntel/SplinterTreev4',
-                    'X-Title': 'SplinterTree by GwynTel',
-                },
+                default_headers=self._get_helicone_headers(provider="openpipe:infermatic"),
                 timeout=30.0
             )
 
@@ -424,16 +420,16 @@ class API:
             
             validated_messages = await self._validate_message_roles(messages)
             
-            # Get Helicone headers
+            # Get Helicone headers with OpenPipe routing
             helicone_headers = self._get_helicone_headers(
-                provider=provider,
+                provider=provider if provider else "openpipe:xai",
                 user_id=user_id,
                 guild_id=guild_id,
                 prompt_file=prompt_file,
                 model_cog=model_cog
             )
             
-            # Update OpenPipe client headers with Helicone headers
+            # Update OpenPipe client headers
             self.openpipe_client.default_headers.update(helicone_headers)
             
             # Prepare request payload
