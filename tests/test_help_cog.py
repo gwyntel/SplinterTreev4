@@ -40,7 +40,7 @@ async def test_uptime_command():
     
     # Mock get_uptime to return a fixed value
     with patch('cogs.help_cog.get_uptime', return_value="1d 2h 3m"):
-        await cog.uptime_command.callback(cog, ctx)
+        await cog.show_uptime_command.callback(cog, ctx)
         ctx.send.assert_awaited_once_with("🕒 Bot has been running for: 1d 2h 3m")
 
 @pytest.mark.asyncio

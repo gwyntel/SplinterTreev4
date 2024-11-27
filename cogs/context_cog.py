@@ -11,10 +11,10 @@ import textwrap
 from openai import OpenAI
 
 class ContextCog(commands.Cog):
-    def __init__(self, bot):
+    def __init__(self, bot, db_path=None):
         self.bot = bot
-        self.db_path = 'databases/interaction_logs.db'
-        self._setup_database()
+        self.db_path = db_path or 'databases/interaction_logs.db'
+        self._db = None  # Database connection will be set by test fixture or created in _setup_database
         self.summary_chunk_hours = 24
         self.last_summary_check = {}
         self.openai_client = OpenAI(
@@ -25,16 +25,32 @@ class ContextCog(commands.Cog):
         self.current_stream = {}
         self.message_cache = {}  # Add message cache
         self.cache_timeout = 300  # 5 minutes cache timeout
+        self._setup_database()  # Call synchronously after all attributes are set
 
     def _setup_database(self):
+        """Setup the database synchronously"""
         try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                with open('databases/schema.sql', 'r') as f:
-                    schema = f.read()
-                    cursor.executescript(schema)
-                conn.commit()
-                logging.info("Database setup completed successfully")
+            if not self._db:
+                self._db = sqlite3.connect(self.db_path, check_same_thread=False)
+                cursor = self._db.cursor()
+                cursor.execute('''
+                CREATE TABLE IF NOT EXISTS messages (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    discord_message_id TEXT UNIQUE,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    channel_id TEXT NOT NULL,
+                    guild_id TEXT,
+                    user_id TEXT NOT NULL,
+                    persona_name TEXT,
+                    content TEXT NOT NULL,
+                    is_assistant BOOLEAN NOT NULL,
+                    parent_message_id INTEGER,
+                    emotion TEXT,
+                    FOREIGN KEY (parent_message_id) REFERENCES messages(id)
+                )
+                ''')
+                self._db.commit()
+            logging.info("Database setup completed successfully")
         except Exception as e:
             logging.error(f"Failed to set up database: {str(e)}")
 
@@ -103,26 +119,25 @@ class ContextCog(commands.Cog):
         try:
             channel_id = str(ctx.channel.id)
             
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                
-                if hours:
-                    cutoff_time = (datetime.now() - timedelta(hours=hours)).isoformat()
-                    cursor.execute('''
-                        DELETE FROM messages 
-                        WHERE channel_id = ? AND timestamp < ?
-                    ''', (channel_id, cutoff_time))
-                    await ctx.send(f"✅ Cleared messages older than {hours} hours from context")
-                else:
-                    cursor.execute('DELETE FROM messages WHERE channel_id = ?', (channel_id,))
-                    await ctx.send("✅ Cleared all messages from context")
-                
-                conn.commit()
-                
-                # Clear cache for this channel
-                cache_keys_to_remove = [k for k in self.message_cache if k.startswith(f"{channel_id}:")]
-                for key in cache_keys_to_remove:
-                    self.message_cache.pop(key, None)
+            cursor = self._db.cursor()
+            
+            if hours:
+                cutoff_time = (datetime.now() - timedelta(hours=hours)).isoformat()
+                cursor.execute('''
+                    DELETE FROM messages 
+                    WHERE channel_id = ? AND timestamp < ?
+                ''', (channel_id, cutoff_time))
+                await ctx.send(f"✅ Cleared messages older than {hours} hours from context")
+            else:
+                cursor.execute('DELETE FROM messages WHERE channel_id = ?', (channel_id,))
+                await ctx.send("✅ Cleared all messages from context")
+            
+            self._db.commit()
+            
+            # Clear cache for this channel
+            cache_keys_to_remove = [k for k in self.message_cache if k.startswith(f"{channel_id}:")]
+            for key in cache_keys_to_remove:
+                self.message_cache.pop(key, None)
                 
         except Exception as e:
             logging.error(f"[Context] Error clearing context: {str(e)}")
@@ -142,74 +157,73 @@ class ContextCog(commands.Cog):
                 return messages
         
         try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                window_size = min(50, limit) if limit is not None else 50
+            cursor = self._db.cursor()
+            window_size = min(50, limit) if limit is not None else 50
+            
+            query = '''
+            SELECT DISTINCT
+                m.discord_message_id,
+                m.user_id,
+                m.content,
+                m.is_assistant,
+                m.persona_name,
+                m.emotion,
+                m.timestamp
+            FROM messages m
+            WHERE m.channel_id = ?
+            AND (? IS NULL OR m.discord_message_id != ?)
+            AND m.content IS NOT NULL
+            AND m.content != ''
+            ORDER BY m.timestamp DESC
+            LIMIT ?
+            '''
+            
+            cursor.execute(query, (
+                channel_id,
+                exclude_message_id,
+                exclude_message_id,
+                window_size
+            ))
+            
+            messages = []
+            seen_contents = set()
+            
+            for row in cursor.fetchall():
+                content = row[2]
+                if not content or content.isspace() or content in seen_contents:
+                    continue
+                seen_contents.add(content)
                 
-                query = '''
-                SELECT DISTINCT
-                    m.discord_message_id,
-                    m.user_id,
-                    m.content,
-                    m.is_assistant,
-                    m.persona_name,
-                    m.emotion,
-                    m.timestamp
-                FROM messages m
-                WHERE m.channel_id = ?
-                AND (? IS NULL OR m.discord_message_id != ?)
-                AND m.content IS NOT NULL
-                AND m.content != ''
-                ORDER BY m.timestamp DESC
-                LIMIT ?
-                '''
-                
-                cursor.execute(query, (
-                    channel_id,
-                    exclude_message_id,
-                    exclude_message_id,
-                    window_size
-                ))
-                
-                messages = []
-                seen_contents = set()
-                
-                for row in cursor.fetchall():
-                    content = row[2]
-                    if not content or content.isspace() or content in seen_contents:
-                        continue
-                    seen_contents.add(content)
-                    
-                    messages.append({
-                        'id': row[0],
-                        'user_id': row[1],
-                        'content': content,
-                        'is_assistant': bool(row[3]),
-                        'persona_name': row[4],
-                        'emotion': row[5],
-                        'timestamp': row[6]
-                    })
-                
-                messages.reverse()
-                
-                # Apply message alternation if needed
-                if model_id and "infermatic" in model_id.lower():
-                    messages = self._ensure_message_alternation(messages)
-                
-                # Cache the results
-                self.message_cache[cache_key] = {
-                    'messages': messages,
-                    'timestamp': datetime.now().timestamp()
-                }
-                
-                return messages
+                messages.append({
+                    'id': row[0],
+                    'user_id': row[1],
+                    'content': content,
+                    'is_assistant': bool(row[3]),
+                    'persona_name': row[4],
+                    'emotion': row[5],
+                    'timestamp': row[6]
+                })
+            
+            messages.reverse()
+            
+            # Apply message alternation if needed
+            if model_id and "infermatic" in model_id.lower():
+                messages = self._ensure_message_alternation(messages)
+            
+            # Cache the results
+            self.message_cache[cache_key] = {
+                'messages': messages,
+                'timestamp': datetime.now().timestamp()
+            }
+            
+            return messages
                 
         except Exception as e:
             logging.error(f"Failed to get context messages: {str(e)}")
             return []
 
     def _ensure_message_alternation(self, messages: List[Dict]) -> List[Dict]:
-        """Ensure messages alternate between user and assistant by inserting blank assistant messages where needed."""
+        """Ensure messages alternate between user and assistant by inserting placeholder assistant messages where needed."""
         if not messages:
             return messages
 
@@ -220,12 +234,12 @@ class ContextCog(commands.Cog):
             is_user = not msg['is_assistant']
             
             # If this is a user message and the last message was also from a user,
-            # insert a blank assistant message
+            # insert a placeholder assistant message
             if is_user and last_was_user:
                 result.append({
                     'id': f"blank_{len(result)}",
                     'user_id': None,
-                    'content': "",  # Blank message
+                    'content': "[No response]",  # Placeholder message instead of empty string
                     'is_assistant': True,
                     'persona_name': None,
                     'emotion': None,
@@ -300,26 +314,25 @@ class ContextCog(commands.Cog):
                     prefixed_content = content
 
             async with asyncio.Lock():
-                with sqlite3.connect(self.db_path) as conn:
-                    cursor = conn.cursor()
-                    
-                    cursor.execute('''
-                    INSERT OR REPLACE INTO messages 
-                    (discord_message_id, channel_id, guild_id, user_id, content, is_assistant, persona_name, emotion, timestamp)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ''', (
-                        str(message_id), 
-                        str(channel_id), 
-                        str(guild_id) if guild_id else None, 
-                        str(user_id), 
-                        prefixed_content,
-                        is_assistant, 
-                        persona_name, 
-                        emotion, 
-                        datetime.now().isoformat()
-                    ))
-                    
-                    conn.commit()
+                cursor = self._db.cursor()
+                
+                cursor.execute('''
+                INSERT OR REPLACE INTO messages 
+                (discord_message_id, channel_id, guild_id, user_id, content, is_assistant, persona_name, emotion, timestamp)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    str(message_id), 
+                    str(channel_id), 
+                    str(guild_id) if guild_id else None, 
+                    str(user_id), 
+                    prefixed_content,
+                    is_assistant, 
+                    persona_name, 
+                    emotion, 
+                    datetime.now().isoformat()
+                ))
+                
+                self._db.commit()
 
             if channel_id not in self.last_messages:
                 self.last_messages[channel_id] = {}
