@@ -14,7 +14,6 @@ from config import (
     OPENROUTER_API_KEY, 
     HELICONE_API_KEY,
     OPENPIPE_API_KEY,
-    OPENPIPE_API_URL,
     OPENAI_API_KEY
 )
 from openpipe import OpenAI as OpenPipeAI
@@ -35,6 +34,10 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
+# Constants
+OPENPIPE_API_URL = "https://api.openpipe.ai/v1"
+HELICONE_API_URL = "https://gateway.helicone.ai"
 
 class DatabasePool:
     def __init__(self, database_path: str, max_connections: int = 10):
@@ -100,10 +103,10 @@ class API:
         headers = {
             'Helicone-Auth': f'Bearer {HELICONE_API_KEY}',
             'Helicone-Cache-Enabled': 'true',
-            'Helicone-Target-Url': OPENPIPE_API_URL  # OpenPipe is our production proxy
+            'Authorization': f'Bearer {OPENPIPE_API_KEY}'
         }
 
-        # Set provider-specific target path prefix
+        # Add OpenPipe path prefix based on provider
         if provider and provider.startswith("openpipe:"):
             provider_type = provider.split(":")[1]  # Extract xai, openrouter, or infermatic
             if provider_type == "xai":
@@ -112,19 +115,22 @@ class API:
                 headers['Helicone-OpenPipe-Path'] = '/openrouter/v1'
             elif provider_type == "infermatic":
                 headers['Helicone-OpenPipe-Path'] = '/infermatic/v1'
-            headers['Helicone-Target-Provider'] = 'OpenPipe'
         else:
             # Default to xai path if no specific provider given
             headers['Helicone-OpenPipe-Path'] = '/xai/v1'
-            headers['Helicone-Target-Provider'] = 'OpenPipe'
 
         # Add custom properties
         if user_id:
             headers['Helicone-Property-User-Id'] = str(user_id)
+        else:
+            headers['Helicone-Property-User-Id'] = 'unknown'
+            
         if guild_id:
             headers['Helicone-Property-Guild-Id'] = str(guild_id)
+            
         if prompt_file:
             headers['Helicone-Property-Prompt-File'] = str(prompt_file)
+            
         if model_cog:
             headers['Helicone-Property-Model-Cog'] = str(model_cog)
 
@@ -139,12 +145,15 @@ class API:
         if self.session is None:
             # Initialize aiohttp session with custom headers and timeout
             timeout = aiohttp.ClientTimeout(total=30, connect=10, sock_read=10)
-            self.session = aiohttp.ClientSession(timeout=timeout)
+            self.session = aiohttp.ClientSession(
+                headers=self._get_helicone_headers(),
+                timeout=timeout
+            )
             
             # Initialize OpenAI client through OpenPipe proxy
             self.openai_client = AsyncOpenAI(
                 api_key=OPENPIPE_API_KEY,
-                base_url="https://gateway.helicone.ai/v1",
+                base_url=f"{HELICONE_API_URL}/v1",
                 default_headers=self._get_helicone_headers(provider="openpipe:xai"),
                 timeout=30.0
             )
@@ -152,7 +161,7 @@ class API:
             # Initialize OpenPipe client
             self.openpipe_client = OpenPipeAI(
                 api_key=OPENPIPE_API_KEY,
-                base_url="https://gateway.helicone.ai/v1",
+                base_url=f"{HELICONE_API_URL}/v1",
                 default_headers=self._get_helicone_headers(provider="openpipe:openrouter"),
                 openpipe={
                     "fallback": {
@@ -164,7 +173,7 @@ class API:
             # Initialize Infermatic client through OpenPipe proxy
             self.infermatic_client = AsyncOpenAI(
                 api_key=OPENPIPE_API_KEY,
-                base_url="https://gateway.helicone.ai/v1",
+                base_url=f"{HELICONE_API_URL}/v1",
                 default_headers=self._get_helicone_headers(provider="openpipe:infermatic"),
                 timeout=30.0
             )
@@ -465,15 +474,7 @@ class API:
 
             try:
                 # Use OpenPipe client with fallback support
-                response = self.openpipe_client.chat.completions.create(**payload)
-                
-                # Handle Helicone rate limits
-                if 'Retry-After' in response.headers:
-                    retry_after = int(response.headers['Retry-After'])
-                    logger.warning(f"[API] Helicone rate limit hit, waiting {retry_after} seconds")
-                    await asyncio.sleep(retry_after)
-                    # Retry the request
-                    response = self.openpipe_client.chat.completions.create(**payload)
+                response = await self.openpipe_client.chat.completions.create(**payload)
                 
                 if stream:
                     return self._stream_response(response, requested_at, payload, provider, user_id, guild_id, prompt_file, model_cog)
