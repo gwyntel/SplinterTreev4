@@ -128,14 +128,18 @@ class ContextCog(commands.Cog):
             logging.error(f"[Context] Error clearing context: {str(e)}")
             await ctx.send("❌ Error clearing context")
 
-    async def get_context_messages(self, channel_id: str, limit: int = None, exclude_message_id: str = None) -> List[Dict]:
+    async def get_context_messages(self, channel_id: str, limit: int = None, exclude_message_id: str = None, model_id: str = None) -> List[Dict]:
         cache_key = f"{channel_id}:{limit}:{exclude_message_id}"
         
         # Check cache first
         if cache_key in self.message_cache:
             cache_entry = self.message_cache[cache_key]
             if datetime.now().timestamp() - cache_entry['timestamp'] < self.cache_timeout:
-                return cache_entry['messages']
+                messages = cache_entry['messages']
+                # Apply message alternation if needed
+                if model_id and "infermatic" in model_id.lower():
+                    messages = self._ensure_message_alternation(messages)
+                return messages
         
         try:
             with sqlite3.connect(self.db_path) as conn:
@@ -188,6 +192,10 @@ class ContextCog(commands.Cog):
                 
                 messages.reverse()
                 
+                # Apply message alternation if needed
+                if model_id and "infermatic" in model_id.lower():
+                    messages = self._ensure_message_alternation(messages)
+                
                 # Cache the results
                 self.message_cache[cache_key] = {
                     'messages': messages,
@@ -199,6 +207,35 @@ class ContextCog(commands.Cog):
         except Exception as e:
             logging.error(f"Failed to get context messages: {str(e)}")
             return []
+
+    def _ensure_message_alternation(self, messages: List[Dict]) -> List[Dict]:
+        """Ensure messages alternate between user and assistant by inserting blank assistant messages where needed."""
+        if not messages:
+            return messages
+
+        result = []
+        last_was_user = None
+
+        for msg in messages:
+            is_user = not msg['is_assistant']
+            
+            # If this is a user message and the last message was also from a user,
+            # insert a blank assistant message
+            if is_user and last_was_user:
+                result.append({
+                    'id': f"blank_{len(result)}",
+                    'user_id': None,
+                    'content': "",  # Blank message
+                    'is_assistant': True,
+                    'persona_name': None,
+                    'emotion': None,
+                    'timestamp': msg['timestamp']  # Use same timestamp as the user message
+                })
+            
+            result.append(msg)
+            last_was_user = is_user
+
+        return result
 
     async def add_message_to_context(self, message_id, channel_id, guild_id, user_id, content, is_assistant, persona_name=None, emotion=None):
         try:

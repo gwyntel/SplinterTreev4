@@ -36,6 +36,7 @@ class InferorCog(BaseCog):
     def get_temperature(self):
         """Get temperature setting for this agent"""
         return self.temperatures.get(self.name.lower(), 0.7)
+
     async def generate_response(self, message):
         """Generate a response using openrouter"""
         try:
@@ -48,7 +49,8 @@ class InferorCog(BaseCog):
             history_messages = await self.context_cog.get_context_messages(
                 channel_id, 
                 limit=50,
-                exclude_message_id=str(message.id)
+                exclude_message_id=str(message.id),
+                model_id=self.model  # Pass model ID to enable message alternation
             )
             
             # Format history messages with proper roles
@@ -100,6 +102,7 @@ class InferorCog(BaseCog):
         except Exception as e:
             logging.error(f"Error processing message for Inferor: {e}")
             return None
+
 async def setup(bot):
     try:
         cog = InferorCog(bot)
