@@ -95,6 +95,22 @@ class API:
             self.openpipe_client = None
             self.infermatic_client = None
 
+    def _get_helicone_headers(self, provider: str = None, user_id: str = None, guild_id: str = None, prompt_file: str = None, model_cog: str = None) -> Dict[str, str]:
+        """Generate Helicone headers with proper properties and cache settings"""
+        headers = {
+            'Helicone-Auth': f'Bearer {HELICONE_API_KEY}',
+            'Helicone-Cache-Enabled': 'true',
+            'Helicone-Target-Url': 'https://api.openpipe.ai/api/v1',
+            'Helicone-Property-Source': provider if provider else 'unknown',
+            'Helicone-Property-User-Id': str(user_id) if user_id else 'unknown',
+            'Helicone-Property-Guild-Id': str(guild_id) if guild_id else 'unknown',
+            'Helicone-Property-Prompt-File': str(prompt_file) if prompt_file else 'unknown',
+            'Helicone-Property-Model-Cog': str(model_cog) if model_cog else 'unknown',
+            'HTTP-Referer': 'https://github.com/gwyntel/SplinterTreev4',
+            'X-Title': 'SplinterTree by GwynTel'
+        }
+        return headers
+
     async def setup(self):
         """Async initialization"""
         if self.session is None:
@@ -104,6 +120,7 @@ class API:
                 headers={
                     'Authorization': f'Bearer {OPENROUTER_API_KEY}',
                     'Helicone-Auth': f'Bearer {HELICONE_API_KEY}',
+                    'Helicone-Target-Url': 'https://api.openpipe.ai/api/v1',
                     'HTTP-Referer': 'https://github.com/gwyntel/SplinterTreev4',
                     'X-Title': 'SplinterTree by GwynTel'
                 },
@@ -117,17 +134,24 @@ class API:
                 default_headers={
                     'Authorization': f'Bearer {OPENROUTER_API_KEY}',
                     'Helicone-Auth': f'Bearer {HELICONE_API_KEY}',
-                    'Helicone-Target-Url': "https://openrouter.ai/api",
+                    'Helicone-Target-Url': 'https://api.openpipe.ai/api/v1',
                     'HTTP-Referer': 'https://github.com/gwyntel/SplinterTreev4',
                     'X-Title': 'SplinterTree by GwynTel',
                 },
                 timeout=30.0
             )
 
-            # Initialize OpenPipe client
+            # Initialize OpenPipe client with Helicone integration
             self.openpipe_client = OpenPipeAI(
                 api_key=OPENPIPE_API_KEY,
-                base_url=OPENPIPE_API_URL,
+                base_url="https://gateway.helicone.ai/v1",
+                default_headers={
+                    'Authorization': f'Bearer {OPENPIPE_API_KEY}',
+                    'Helicone-Auth': f'Bearer {HELICONE_API_KEY}',
+                    'Helicone-Target-Url': 'https://api.openpipe.ai/api/v1',
+                    'HTTP-Referer': 'https://github.com/gwyntel/SplinterTreev4',
+                    'X-Title': 'SplinterTree by GwynTel'
+                },
                 openpipe={
                     "fallback": {
                         "model": "gpt-4-turbo-preview"  # Fallback to OpenAI if needed
@@ -142,7 +166,7 @@ class API:
                 default_headers={
                     'Authorization': f'Bearer {HELICONE_API_KEY}',
                     'Helicone-Auth': f'Bearer {HELICONE_API_KEY}',
-                    'Helicone-Target-Url': "https://api.totalgpt.ai",
+                    'Helicone-Target-Url': 'https://api.openpipe.ai/api/v1',
                     'HTTP-Referer': 'https://github.com/gwyntel/SplinterTreev4',
                     'X-Title': 'SplinterTree by GwynTel',
                 },
@@ -400,6 +424,18 @@ class API:
             
             validated_messages = await self._validate_message_roles(messages)
             
+            # Get Helicone headers
+            helicone_headers = self._get_helicone_headers(
+                provider=provider,
+                user_id=user_id,
+                guild_id=guild_id,
+                prompt_file=prompt_file,
+                model_cog=model_cog
+            )
+            
+            # Update OpenPipe client headers with Helicone headers
+            self.openpipe_client.default_headers.update(helicone_headers)
+            
             # Prepare request payload
             payload = {
                 "model": model,
@@ -434,6 +470,14 @@ class API:
             try:
                 # Use OpenPipe client with fallback support
                 response = self.openpipe_client.chat.completions.create(**payload)
+                
+                # Handle Helicone rate limits
+                if 'Retry-After' in response.headers:
+                    retry_after = int(response.headers['Retry-After'])
+                    logger.warning(f"[API] Helicone rate limit hit, waiting {retry_after} seconds")
+                    await asyncio.sleep(retry_after)
+                    # Retry the request
+                    response = self.openpipe_client.chat.completions.create(**payload)
                 
                 if stream:
                     return self._stream_response(response, requested_at, payload, provider, user_id, guild_id, prompt_file, model_cog)
