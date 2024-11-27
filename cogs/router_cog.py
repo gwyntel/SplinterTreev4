@@ -47,10 +47,8 @@ class RouterCog(BaseCog):
 
         # Map of model name variations to correct cog names
         self.model_name_map = {
-            'gpt4o': 'GPT4O',
-            'gpt-4o': 'GPT4O',
-            'gpt4': 'GPT4O',
-            'gpt-4': 'GPT4O',
+            'gpt4': 'GPT4',
+            'gpt-4': 'GPT4',
             'claude3haiku': 'Claude3Haiku',
             'claude3': 'Claude3Haiku',
             'claude': 'Claude3Haiku',
@@ -154,7 +152,7 @@ class RouterCog(BaseCog):
             return model_name
         except Exception as e:
             logging.error(f"[Router] Error extracting model name: {str(e)}")
-            return 'gpt4o'  # Default to GPT4O on error
+            return 'gpt4'  # Default to GPT4 on error
 
     def _normalize_model_name(self, name: str) -> str:
         """Normalize model name to correct cog name format"""
@@ -174,11 +172,11 @@ class RouterCog(BaseCog):
                 if key in clean_name or clean_name in key:
                     return value
                     
-            # Default to GPT4O if no match found
-            return 'GPT4O'
+            # Default to GPT4 if no match found
+            return 'GPT4'
         except Exception as e:
             logging.error(f"[Router] Error normalizing model name: {str(e)}")
-            return 'GPT4O'
+            return 'GPT4'
 
     def analyze_sentiment(self, text: str) -> tuple:
         """
@@ -293,20 +291,20 @@ class RouterCog(BaseCog):
                         await cog.handle_message(message)
                     else:
                         logging.error(f"[Router] Cog '{cog_name}' not found or 'handle_message' not implemented")
-                        # Default to GPT4O if cog not found
-                        fallback_cog = self.bot.get_cog("GPT4OCog")
+                        # Default to GPT4 if cog not found
+                        fallback_cog = self.bot.get_cog("GPT4Cog")
                         if fallback_cog and hasattr(fallback_cog, 'handle_message'):
-                            logging.info("[Router] Falling back to GPT4OCog")
+                            logging.info("[Router] Falling back to GPT4Cog")
                             await fallback_cog.handle_message(message)
                         else:
                             await message.reply("❌ Unable to route message to the appropriate module.")
 
                 except Exception as e:
                     logging.error(f"[Router] API error: {str(e)}")
-                    # Attempt to fallback to GPT4O
-                    fallback_cog = self.bot.get_cog("GPT4OCog")
+                    # Attempt to fallback to GPT4
+                    fallback_cog = self.bot.get_cog("GPT4Cog")
                     if fallback_cog and hasattr(fallback_cog, 'handle_message'):
-                        logging.info("[Router] Falling back to GPT4OCog due to API error")
+                        logging.info("[Router] Falling back to GPT4Cog due to API error")
                         await fallback_cog.handle_message(message)
                     else:
                         await message.reply("❌ An error occurred while processing your message. Please try again later.")

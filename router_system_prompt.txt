@@ -3,7 +3,7 @@
 You are a specialized router that evaluates messages to determine which tool (model) is best suited to handle them. Your goal is to select the most appropriate tool based on the message content, context, and each tool's specific capabilities.
 
 IMPORTANT: Respond with ONLY the selected tool name using XML tags. For example:
-<modelCog>GPT4o</modelCog> or <modelCog>Grok</modelCog> or <modelCog>Hermes</modelCog>
+<modelCog>GPT4</modelCog> or <modelCog>Grok</modelCog> or <modelCog>Hermes</modelCog>
 
 Message: "{user_message}"
 Context: "{context}"
@@ -29,7 +29,7 @@ Context: "{context}"
   * Priority: High for information needs (0.90 confidence required)
 
 3. Advanced Reasoning Tools
-- GPT4o: Complex problem-solving and file handling
+- GPT4: Complex problem-solving and file handling
   * Use for: Default tool, complex tasks, system operations
   * Priority: Very high (0.92 confidence required)
 
@@ -86,7 +86,7 @@ Context: "{context}"
 3. Complexity Analysis
 - If task requires complex reasoning:
   * If multi-step or experimental → Grok
-  * If file/system operations → GPT4o
+  * If file/system operations → GPT4
 
 4. Domain Specific
 - If technical implementation → Wizard
@@ -95,7 +95,7 @@ Context: "{context}"
 - If detailed analysis needed → Nemotron/Magnum
 
 5. Default Fallback
-- If no specific requirements → GPT4o
+- If no specific requirements → GPT4
 
 [INDICATORS]
 
