@@ -103,7 +103,9 @@ class API:
         headers = {
             'Helicone-Auth': f'Bearer {HELICONE_API_KEY}',
             'Helicone-Cache-Enabled': 'true',
-            'Authorization': f'Bearer {OPENPIPE_API_KEY}'
+            'Authorization': f'Bearer {OPENPIPE_API_KEY}',
+            'Helicone-Target-Url': OPENPIPE_API_URL,
+            'Helicone-Target-Provider': 'OpenPipe'
         }
 
         # Add OpenPipe path prefix based on provider
@@ -111,13 +113,17 @@ class API:
             provider_type = provider.split(":")[1]  # Extract xai, openrouter, or infermatic
             if provider_type == "xai":
                 headers['Helicone-OpenPipe-Path'] = '/xai/v1'
+                headers['Helicone-Property-Source'] = 'xai'
             elif provider_type == "openrouter":
                 headers['Helicone-OpenPipe-Path'] = '/openrouter/v1'
+                headers['Helicone-Property-Source'] = 'openrouter'
             elif provider_type == "infermatic":
                 headers['Helicone-OpenPipe-Path'] = '/infermatic/v1'
+                headers['Helicone-Property-Source'] = 'infermatic'
         else:
             # Default to xai path if no specific provider given
             headers['Helicone-OpenPipe-Path'] = '/xai/v1'
+            headers['Helicone-Property-Source'] = 'xai'
 
         # Add custom properties
         if user_id:
