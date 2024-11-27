@@ -483,7 +483,17 @@ class API:
                 response = await self.openpipe_client.chat.completions.create(**payload)
                 
                 if stream:
-                    return self._stream_response(response, requested_at, payload, provider, user_id, guild_id, prompt_file, model_cog)
+                    # Convert synchronous stream to async generator
+                    async def async_stream():
+                        try:
+                            for chunk in response:
+                                if chunk and chunk.choices:
+                                    yield chunk
+                        except Exception as e:
+                            logger.error(f"[API] Error in async stream conversion: {str(e)}")
+                            raise
+                    
+                    return self._stream_response(async_stream(), requested_at, payload, provider, user_id, guild_id, prompt_file, model_cog)
                 else:
                     received_at = int(time.time() * 1000)
                     

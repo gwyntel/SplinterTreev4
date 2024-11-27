@@ -287,6 +287,16 @@ class RouterCog(BaseCog):
                     
                     if cog and hasattr(cog, 'handle_message'):
                         logging.info(f"[Router] Found cog {cog_name}, forwarding message")
+                        # Update bot's nickname before forwarding message
+                        if message.guild:
+                            try:
+                                await message.guild.me.edit(nick=cog.name)
+                                logging.info(f"[Router] Updated nickname to {cog.name}")
+                            except discord.Forbidden:
+                                logging.error(f"[Router] Missing permissions to update nickname")
+                            except Exception as e:
+                                logging.error(f"[Router] Error updating nickname: {str(e)}")
+                        
                         # Forward the message to the cog
                         await cog.handle_message(message)
                     else:
@@ -295,6 +305,16 @@ class RouterCog(BaseCog):
                         fallback_cog = self.bot.get_cog("GPT4Cog")
                         if fallback_cog and hasattr(fallback_cog, 'handle_message'):
                             logging.info("[Router] Falling back to GPT4Cog")
+                            # Update bot's nickname before falling back
+                            if message.guild:
+                                try:
+                                    await message.guild.me.edit(nick=fallback_cog.name)
+                                    logging.info(f"[Router] Updated nickname to {fallback_cog.name}")
+                                except discord.Forbidden:
+                                    logging.error(f"[Router] Missing permissions to update nickname")
+                                except Exception as e:
+                                    logging.error(f"[Router] Error updating nickname: {str(e)}")
+                            
                             await fallback_cog.handle_message(message)
                         else:
                             await message.reply("❌ Unable to route message to the appropriate module.")
@@ -305,6 +325,16 @@ class RouterCog(BaseCog):
                     fallback_cog = self.bot.get_cog("GPT4Cog")
                     if fallback_cog and hasattr(fallback_cog, 'handle_message'):
                         logging.info("[Router] Falling back to GPT4Cog due to API error")
+                        # Update bot's nickname before falling back
+                        if message.guild:
+                            try:
+                                await message.guild.me.edit(nick=fallback_cog.name)
+                                logging.info(f"[Router] Updated nickname to {fallback_cog.name}")
+                            except discord.Forbidden:
+                                logging.error(f"[Router] Missing permissions to update nickname")
+                            except Exception as e:
+                                logging.error(f"[Router] Error updating nickname: {str(e)}")
+                        
                         await fallback_cog.handle_message(message)
                     else:
                         await message.reply("❌ An error occurred while processing your message. Please try again later.")

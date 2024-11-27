@@ -182,18 +182,25 @@ class BaseCog(commands.Cog):
             return False
 
     async def update_bot_profile(self, guild: discord.Guild, model_name: str):
-        """Update bot's server profile without glitch text"""
+        """Update bot's server profile"""
         try:
             # Use the model name directly for the nickname
-            nick = f"{model_name} ⟨v̷o̷i̷d̷⟩"
+            nick = model_name
             
             # Ensure nickname doesn't exceed Discord's 32-character limit
             if len(nick) > 32:
                 nick = nick[:32]
             
-            # Update the bot's nickname in the guild
-            await guild.me.edit(nick=nick)
-            logging.debug(f"[{self.name}] Updated profile in {guild.name} to {nick}")
+            # Get the bot member object
+            bot_member = guild.me
+            if bot_member:
+                # Update the bot's nickname in the guild
+                await bot_member.edit(nick=nick)
+                logging.debug(f"[{self.name}] Updated profile in {guild.name} to {nick}")
+            else:
+                logging.error(f"[{self.name}] Could not find bot member in guild {guild.name}")
+        except discord.Forbidden:
+            logging.error(f"[{self.name}] Missing permissions to update nickname in {guild.name}")
         except Exception as e:
             logging.error(f"[{self.name}] Failed to update profile: {str(e)}")
 
