@@ -7,7 +7,7 @@ A powerful Discord bot that provides access to multiple AI language models with 
 ### Core Features
 
 - **Multi-Model Support**: Access a variety of AI models through OpenRouter and OpenPipe, including specialized models for different tasks.
-- **Intelligent Message Routing**: Routes messages to appropriate models based on content with the **RouterCog**, handling DMs and channel activation while preventing routing loops.
+- **Intelligent Message Routing**: Routes messages to appropriate models based on content with the **RouterCog**, handling DMs and channel activation while preventing routing loops.  The routing logic is detailed in the section below.
 - **Context Management**: Manages conversation history using **ContextCog**, with per-channel message history and configurable context window sizes.
 - **Shared Context Database**: SQLite-based persistent conversation history shared between all models, enabling cross-model context.
 - **Dynamic System Prompts**: Customizable per-channel system prompts with variable support for personalized interactions.
@@ -28,119 +28,50 @@ A powerful Discord bot that provides access to multiple AI language models with 
 - **Router Mode**: Ability to make the Router respond to all messages in a channel.
 - **Per-Channel Activation**: Activate or deactivate bot responses in specific channels.
 
+
 ### Specialized Model Cogs
+
+This section details the individual cogs responsible for interacting with specific AI models. Each cog description includes information about the model used, its provider, triggers, vision support, temperature settings, strengths, and weaknesses.
 
 - **MixtralCog**: General-purpose model with configurable temperature settings.
 - **GeminiCog**: Vision-capable model specialized in image analysis.
-- **SonarCog**: Specialized in current events and real-time information processing.
-- **NemotronCog**: Technical and code-focused model with complex system design capabilities.
+- **SonarCog**: Specialized in current events and real-time information processing. See above for details.
+- **NemotronCog**: Technical and code-focused model with complex system design capabilities. See above for details.
 - **NoromaidCog**: Roleplay and narrative-focused model handling complex scenes.
 - **UnslopNemoCog**: Handles medium-length interactions with group scenes and dialogue.
 - **LiquidCog**: Provides quick actions and short-form content responses.
-- **HermesCog**: Focused on mental health and crisis support, handling sensitive topics with high priority.
-- **GPT4OCog**:
-  - **Model**: `openpipe:openrouter/openai/gpt-4o-2024-11-20`
-  - **Provider**: `openpipe`
-  - **Trigger**: `'gpt4o', '4o', 'openai'`
-  - **Vision Support**: **No**
-  - **Temperature**: Configurable via `temperatures.json`
-  - **Strengths**:
-    - Specialized model for focused functionality.
-    - Temperature control for creativity and randomness.
-    - Contextual understanding through context cog integration.
-    - API integration with `openrouter`.
-    - Comprehensive error handling.
-  - **Weaknesses**:
-    - Dependency on external API.
-    - Limited flexibility.
-    - Potential performance issues.
-    - Configuration requirements.
+- **HermesCog**: Focused on mental health and crisis support, handling sensitive topics with high priority. See above for details.
+- **GPT4OCog**:  Details about GPT-4O model, provider, triggers, vision support, temperature, strengths, and weaknesses. See above for details.
+- **GrokCog**: Details about Grok model, provider, triggers, vision support, temperature, strengths, and weaknesses. See above for details.
+- **HelpCog**: Details about HelpCog functionality, strengths, and weaknesses. See above for details.
+- **ManagementCog**: Details about ManagementCog functionality, strengths, and weaknesses. See above for details.
+- **WebhookCog**: Details about WebhookCog functionality, strengths, and weaknesses. See above for details.
+- **InferorCog**: Details about Inferor model, provider, triggers, vision support, temperature, strengths, and weaknesses. See above for details.
+- **Claude-3-HaikuCog**: This cog interacts with the Claude-3-5-Haiku model via the OpenPipe API, specializing in generating haiku poems. See above for details.
+- **DeepseekCog**: This cog interacts with the Deepseek model via the OpenPipe API. See above for details.
+- **LlamaVisionCog**: This cog interacts with the LlamaVision model via the OpenPipe API, specializing in image analysis. See above for details.
+- **MagnumCog**: This cog interacts with the Magnum model via the OpenPipe API. See above for details.
+- **QwenCog**: This cog interacts with the Qwen model via the OpenPipe API. See above for details.
+- **RocinanteCog**: This cog interacts with the Rocinante model via the OpenPipe API. See above for details.
+- **SonarCog**: This cog interacts with the Sonar model via the OpenPipe API, specializing in current events and real-time information retrieval.  It retrieves citations from the API response and includes them in the output. See above for details.
+- **SorcererCog**: This cog interacts with the Sorcerer model via the OpenPipe API. See above for details.
+- **SYDNEY-COURTCog**: This cog interacts with the SYDNEY-COURT model via the OpenPipe API. See above for details.
+- **UnslopCog**: This cog interacts with the UnslopNemo model via the OpenPipe API, handling medium-length interactions with group scenes and dialogue.  It formats messages to ensure proper role alternation. See above for details.
+- **WizardCog**: This cog interacts with the WizardLM model via the OpenPipe API. See above for details.
 
-- **GrokCog**:
-  - **Model**: `openpipe:openrouter/x-ai/grok-beta`
-  - **Provider**: `openpipe`
-  - **Trigger**: `'grok', 'xAI'`
-  - **Vision Support**: **No**
-  - **Temperature**: Configurable via `temperatures.json`
-  - **Strengths**:
-    - Specialized model for focused functionality.
-    - Temperature control for creativity and randomness.
-    - Contextual understanding through context cog integration.
-    - API integration with `openrouter`.
-    - Comprehensive error handling.
-  - **Weaknesses**:
-    - Dependency on external API.
-    - Limited flexibility.
-    - Potential performance issues.
-    - Configuration requirements.
-
-- **HelpCog**:
-  - **Strengths**:
-    - Comprehensive help commands including model lists and descriptions.
-    - Model list management commands (`/listmodels`, `/list_agents`).
-    - System prompt management commands (`/set_system_prompt`, `/reset_system_prompt`).
-    - Webhook integration command (`/hook`).
-    - Error handling for various commands.
-    - Slash command support.
-  - **Weaknesses**:
-    - Dependency on other cogs like RouterCog for some functionalities.
-    - Complexity in error handling which might add complexity to the codebase if not managed properly.
-    - Limited flexibility in webhook handling which is specific to sending messages through configured webhooks.
-
-- **ManagementCog**:
-  - **Strengths**:
-    - Opt-out feature allowing users to opt out of all bot interactions via `optout`.
-    - Database interaction for managing banned users securely using SQLite.
-    - Comprehensive error handling ensuring any issues are logged and managed properly.
-    - API integration with `openrouter`.
-    - Contextual understanding through context cog integration.
-  - **Weaknesses**:
-    - Dependency on external API which could be a weakness if it experiences downtime or changes its interface.
-    - Limited flexibility as it is highly specialized for management tasks.
-    - Potential performance issues due to database operations.
-    - Configuration requirements for specific files like `temperatures.json`.
-
-- **WebhookCog**:
-  - **Strengths**:
-    - Webhook integration for sending LLM responses through Discord webhooks.
-    - Comprehensive error handling including retries for rate limits and timeouts.
-    - Scalability in handling multiple webhooks.
-    - Customization options for webhooks with unique names and avatars.
-    - Automation of sending messages through webhooks.
-  - **Weaknesses**:
-    - Rate limitations which may still fail if exceeded despite retries.
-    - Complexity in error handling mechanism.
-    - Configuration requirements for specific settings like `MAX_RETRIES`, `WEBHOOK_TIMEOUT`.
-
-- **InferorCog**:
-  - **Model**: `openpipe:infermatic/Infermatic-MN-12B-Inferor-v0.0`
-  - **Provider**: `openpipe`
-  - **Trigger**: `'inferor'`
-  - **Vision Support**: **No**
-  - **Temperature**: Configurable via `temperatures.json`
-  - **Strengths**:
-    - Specialized model for focused functionality.
-    - Temperature control for creativity and randomness.
-    - Contextual understanding through context cog integration.
-    - API integration with `openrouter`.
-    - Comprehensive error handling.
-  - **Weaknesses**:
-    - Dependency on external API.
-    - Limited flexibility.
-    - Potential performance issues.
-    - Configuration requirements.
 
 ### Management Cogs
 
 1. **ManagementCog** (`management_cog.py`)
    - Administrative commands.
    - Bot status management.
-   - Channel configuration.
+   - Channel configuration. See above for details.
 
-2. **WebhookCog** (`webhook_cog.py`)
-   - Handles Discord webhook integrations.
+2. **WebhookCog** (`cogs/webhook_cog.py`)
+   - Handles Discord webhook integrations.  This cog uses the `/hook` command to send messages to configured webhooks. It includes retry logic for rate limits and timeouts.
    - Response broadcasting.
-   - Webhook configuration management.
+   - Webhook configuration management. See above for details.
+
 
 ## 🔧 Commands
 
@@ -200,24 +131,134 @@ When setting custom system prompts, you can use these variables:
 
 ## 📝 Key Files
 
-1. **`temperatures.json`**
-   - Model temperature settings.
-   - Default: `0.7` if not specified.
+This section provides a brief overview of the key files within the project and their purpose.
 
-2. **`dynamic_prompts.json`**
-   - Custom system prompts per channel.
-   - Override default prompts.
+1. **`temperatures.json`**: Model temperature settings. Default: `0.7` if not specified.
+2. **`dynamic_prompts.json`**: Custom system prompts per channel. Override default prompts.
+3. **`bot_config.json`**: Bot configuration settings. Status display settings. Feature toggles.
+4. **`databases/schema.sql`**: SQLite database schema. Context and interaction logging tables.
+5. **`activated_channels.json`**: Tracks channels where the bot is activated.
+6. **`cogs/*`**: Contains the individual cogs for different AI models and functionalities.
+7. **`config/*`**: Contains configuration files for the bot.
+8. **`databases/*`**: Contains the database schema and related files.
+9. **`docs/*`**: Contains documentation files.
+10. **`logs/*`**: Contains log files.
+11. **`nexa-sdk/*`**: Contains the Nexa SDK (if applicable).
+12. **`prompts/*`**: Contains prompt templates and configurations.
+13. **`shared/*`**: Contains shared utility functions and modules.
+14. **`static/*`**: Contains static assets like images.
+15. **`tests/*`**: Contains unit tests for the project.
 
-3. **`bot_config.json`**
-   - Bot configuration settings.
-   - Status display settings.
-   - Feature toggles.
 
-4. **`databases/schema.sql`**
-   - SQLite database schema.
-   - Context and interaction logging tables.
+## Project Structure
 
-5. **`activated_channels.json`**
-   - Tracks channels where the bot is activated.
+The project is structured as follows:
 
----
+- **`cogs`**: Contains individual cogs for different AI models and functionalities.
+- **`config`**: Contains configuration files for the bot.
+- **`databases`**: Contains the database schema and related files.
+- **`docs`**: Contains documentation files.
+- **`logs`**: Contains log files.
+- **`nexa-sdk`**: Contains the Nexa SDK (if applicable).
+- **`prompts`**: Contains prompt templates and configurations.
+- **`shared`**: Contains shared utility functions and modules.
+- **`static`**: Contains static assets like images.
+- **`tests`**: Contains unit tests for the project.
+
+## Cogs and Function Summaries
+
+### BaseCog (`cogs/base_cog.py`)
+
+This cog provides the base functionality for other cogs, including message handling, response generation, and interaction with the Discord API.  See above for details.
+
+### ManagementCog (`cogs/management_cog.py`)
+
+This cog provides administrative commands for managing the bot and its settings. See above for details.
+
+### RouterCog (`cogs/router_cog.py`)
+
+This cog is responsible for routing messages to the appropriate cog based on the content of the message.  The routing logic is defined in `router_system_prompt.txt` and considers various factors such as message content, context, and the capabilities of each cog. See above for details.
+
+### HelpCog (`cogs/help_cog.py`)
+
+This cog provides help commands and manages channel activation. See above for details.
+
+### ContextCog (`cogs/context_cog.py`)
+
+This cog manages the conversation context, storing and retrieving messages from a database. See above for details.
+
+### GPT4OCog (`cogs/gpt4o_cog.py`)
+
+This cog interacts with the GPT-4o model via the OpenPipe API. See above for details.
+
+### GrokCog (`cogs/grok_cog.py`)
+
+This cog interacts with the Grok model via the OpenPipe API. See above for details.
+
+### Claude-3-HaikuCog (`cogs/claude3haiku_cog.py`)
+
+This cog interacts with the Claude-3-5-Haiku model via the OpenPipe API, specializing in generating haiku poems. See above for details.
+
+### DeepseekCog (`cogs/deepseek_cog.py`)
+
+This cog interacts with the Deepseek model via the OpenPipe API. See above for details.
+
+### HermesCog (`cogs/hermes_cog.py`)
+
+This cog interacts with the Hermes model via the OpenPipe API, focusing on mental health and crisis support. See above for details.
+
+### InferorCog (`cogs/inferor_cog.py`)
+
+This cog interacts with the Inferor model via the OpenPipe API. See above for details.
+
+### LlamaVisionCog (`cogs/llamavision_cog.py`)
+
+This cog interacts with the LlamaVision model via the OpenPipe API, specializing in image analysis. See above for details.
+
+### MagnumCog (`cogs/magnum_cog.py`)
+
+This cog interacts with the Magnum model via the OpenPipe API. See above for details.
+
+### NemotronCog (`cogs/nemotron_cog.py`)
+
+This cog interacts with the Nemotron model via the OpenPipe API, specializing in technical and code-focused tasks. See above for details.
+
+### QwenCog (`cogs/qwen_cog.py`)
+
+This cog interacts with the Qwen model via the OpenPipe API. See above for details.
+
+### RocinanteCog (`cogs/rocinante_cog.py`)
+
+This cog interacts with the Rocinante model via the OpenPipe API. See above for details.
+
+### SonarCog (`cogs/sonar_cog.py`)
+
+This cog interacts with the Sonar model via the OpenPipe API, specializing in current events and real-time information retrieval.  It retrieves citations from the API response and includes them in the output. See above for details.
+
+### SorcererCog (`cogs/sorcerer_cog.py`)
+
+This cog interacts with the Sorcerer model via the OpenPipe API. See above for details.
+
+### SYDNEY-COURTCog (`cogs/sydney_cog.py`)
+
+This cog interacts with the SYDNEY-COURT model via the OpenPipe API. See above for details.
+
+### UnslopCog (`cogs/unslop_cog.py`)
+
+This cog interacts with the UnslopNemo model via the OpenPipe API, handling medium-length interactions with group scenes and dialogue.  It formats messages to ensure proper role alternation. See above for details.
+
+### WebhookCog (`cogs/webhook_cog.py`)
+
+This cog handles Discord webhook integrations, allowing for broadcasting messages to configured webhooks. It includes retry logic for rate limits and timeouts. See above for details.
+
+### WizardCog (`cogs/wizard_cog.py`)
+
+This cog interacts with the WizardLM model via the OpenPipe API.
+
+**Classes:**
+
+* **`WizardCog`**: This class inherits from `BaseCog` and provides the following functions:
+    * **`__init__`**: Initializes the cog with specific settings for Wizard.
+    * **`qualified_name`**: Returns the cog's name.
+    * **`get_temperature`**: Returns the temperature setting for this cog.
+    * **`generate_response`**: Generates a response using the OpenPipe API, incorporating conversation history from the database.
