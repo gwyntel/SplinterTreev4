@@ -333,53 +333,34 @@ class API:
         full_response = ""
         citations = None  # Will be populated from the root response object
         try:
-            # Log the type of response_stream for debugging
-            logger.info(f"[API] Type of response_stream: {type(response_stream)}")
-            logger.info(f"[API] Attributes of response_stream: {dir(response_stream)}")
+            # Convert synchronous stream to async generator if needed
+            async def process_stream():
+                if hasattr(response_stream, '__aiter__'):
+                    # Already an async iterator
+                    async for chunk in response_stream:
+                        yield chunk
+                else:
+                    # Convert sync iterator to async
+                    for chunk in response_stream:
+                        yield chunk
 
-            # Get citations from the root response object if available
-            if hasattr(response_stream, 'citations'):
-                citations = response_stream.citations
+            async for chunk in process_stream():
+                if not chunk or not chunk.choices:
+                    continue
 
-            # Check if response_stream is asynchronous
-            if hasattr(response_stream, '__aiter__'):
-                async for chunk in response_stream:
-                    if not chunk or not chunk.choices:
-                        continue
-
-                    delta = chunk.choices[0].delta
-                    if hasattr(delta, 'content') and delta.content:
-                        full_response += delta.content
-                        yield delta.content
-                    elif hasattr(delta, 'tool_calls') and delta.tool_calls:
-                        tool_call = delta.tool_calls[0]
-                        if hasattr(tool_call, 'function'):
-                            tool_data = {
-                                'name': tool_call.function.name if hasattr(tool_call.function, 'name') else None,
-                                'arguments': tool_call.function.arguments if hasattr(tool_call.function, 'arguments') else None
-                            }
-                            yield json.dumps(tool_data)
-                            full_response += json.dumps(tool_data)
-
-            # Handle synchronous streams
-            elif hasattr(response_stream, '__iter__'):
-                for chunk in response_stream:
-                    if not chunk or not chunk.choices:
-                        continue
-
-                    delta = chunk.choices[0].delta
-                    if hasattr(delta, 'content') and delta.content:
-                        full_response += delta.content
-                        yield delta.content
-                    elif hasattr(delta, 'tool_calls') and delta.tool_calls:
-                        tool_call = delta.tool_calls[0]
-                        if hasattr(tool_call, 'function'):
-                            tool_data = {
-                                'name': tool_call.function.name if hasattr(tool_call.function, 'name') else None,
-                                'arguments': tool_call.function.arguments if hasattr(tool_call.function, 'arguments') else None
-                            }
-                            yield json.dumps(tool_data)
-                            full_response += json.dumps(tool_data)
+                delta = chunk.choices[0].delta
+                if hasattr(delta, 'content') and delta.content:
+                    full_response += delta.content
+                    yield delta.content
+                elif hasattr(delta, 'tool_calls') and delta.tool_calls:
+                    tool_call = delta.tool_calls[0]
+                    if hasattr(tool_call, 'function'):
+                        tool_data = {
+                            'name': tool_call.function.name if hasattr(tool_call.function, 'name') else None,
+                            'arguments': tool_call.function.arguments if hasattr(tool_call.function, 'arguments') else None
+                        }
+                        yield json.dumps(tool_data)
+                        full_response += json.dumps(tool_data)
 
             # After streaming content, append citations if present
             if citations:
@@ -479,17 +460,7 @@ class API:
                 response = await self.openpipe_client.chat.completions.create(**payload)
                 
                 if stream:
-                    # Convert synchronous stream to async generator
-                    async def async_stream():
-                        try:
-                            for chunk in response:
-                                if chunk and chunk.choices:
-                                    yield chunk
-                        except Exception as e:
-                            logger.error(f"[API] Error in async stream conversion: {str(e)}")
-                            raise
-                    
-                    return self._stream_response(async_stream(), requested_at, payload, provider, user_id, guild_id, prompt_file, model_cog)
+                    return self._stream_response(response, requested_at, payload, provider, user_id, guild_id, prompt_file, model_cog)
                 else:
                     received_at = int(time.time() * 1000)
                     

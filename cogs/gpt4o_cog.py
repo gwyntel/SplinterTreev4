@@ -19,3 +19,7 @@ class GPT4OCog(BaseCog):
         """
         # Placeholder implementation
         return f"Response from {self.qualified_name} for message: {message.content}"
+
+async def setup(bot):
+    """Required setup function for the cog"""
+    await bot.add_cog(GPT4OCog(bot))

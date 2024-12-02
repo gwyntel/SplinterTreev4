@@ -230,12 +230,21 @@ async def setup_cogs(bot: SplinterTreeBot):
         await bot.load_extension('cogs.help_cog')
         logging.info("Loaded help cog")
         
+        # Add a small delay to ensure cog registration is complete
+        await asyncio.sleep(1)
+        
         # Ensure help command is accessible
-        help_cog = bot.get_cog('HelpCog')
+        help_cog = bot.get_cog('Help')  # Changed from 'HelpCog' to 'Help' to match the cog's qualified_name
         if help_cog:
             logging.info("Help cog loaded successfully")
         else:
-            logging.error("Failed to find HelpCog after loading")
+            logging.error("Failed to find Help cog after loading")
+            # Try to load it again if not found
+            try:
+                await bot.reload_extension('cogs.help_cog')
+                logging.info("Successfully reloaded help cog")
+            except Exception as e:
+                logging.error(f"Error reloading help cog: {e}")
     except Exception as e:
         logging.error(f"Failed to load help cog: {str(e)}")
         logging.error(traceback.format_exc())
