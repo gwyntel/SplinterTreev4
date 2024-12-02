@@ -457,7 +457,7 @@ class API:
 
             try:
                 # Use OpenPipe client with fallback support
-                response = await self.openpipe_client.chat.completions.create(**payload)
+                response = self.openpipe_client.chat.completions.create(**payload)
                 
                 if stream:
                     return self._stream_response(response, requested_at, payload, provider, user_id, guild_id, prompt_file, model_cog)
