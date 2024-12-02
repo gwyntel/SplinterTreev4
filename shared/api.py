@@ -333,11 +333,15 @@ class API:
         full_response = ""
         citations = None  # Will be populated from the root response object
         try:
+            # Log the type of response_stream for debugging
+            logger.info(f"[API] Type of response_stream: {type(response_stream)}")
+            logger.info(f"[API] Attributes of response_stream: {dir(response_stream)}")
+
             # Get citations from the root response object if available
             if hasattr(response_stream, 'citations'):
                 citations = response_stream.citations
 
-            # Convert response_stream to async generator if it's not already
+            # Check if response_stream is asynchronous
             if hasattr(response_stream, '__aiter__'):
                 async for chunk in response_stream:
                     if not chunk or not chunk.choices:
@@ -357,16 +361,8 @@ class API:
                             yield json.dumps(tool_data)
                             full_response += json.dumps(tool_data)
 
-                # After streaming content, append citations if present
-                if citations:
-                    citation_text = "\n\n**Sources:**"
-                    for i, citation in enumerate(citations, 1):
-                        citation_text += f"\n[{i}] {citation}"
-                    yield citation_text
-                    full_response += citation_text
-
-            else:
-                # Handle non-async stream
+            # Handle synchronous streams
+            elif hasattr(response_stream, '__iter__'):
                 for chunk in response_stream:
                     if not chunk or not chunk.choices:
                         continue
@@ -385,13 +381,13 @@ class API:
                             yield json.dumps(tool_data)
                             full_response += json.dumps(tool_data)
 
-                # After streaming content, append citations if present
-                if citations:
-                    citation_text = "\n\n**Sources:**"
-                    for i, citation in enumerate(citations, 1):
-                        citation_text += f"\n[{i}] {citation}"
-                    yield citation_text
-                    full_response += citation_text
+            # After streaming content, append citations if present
+            if citations:
+                citation_text = "\n\n**Sources:**"
+                for i, citation in enumerate(citations, 1):
+                    citation_text += f"\n[{i}] {citation}"
+                yield citation_text
+                full_response += citation_text
 
             # Log completion with full accumulated response
             received_at = int(time.time() * 1000)
