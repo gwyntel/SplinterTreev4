@@ -64,7 +64,7 @@ class HelpCog(commands.Cog, name="Help"):
             return {}
 
     @commands.hybrid_command(name="set_system_prompt", with_app_command=True)
-    @commands.has_permissions(administrator=True)
+    @commands.has_role("Bot Tender")
     @discord.app_commands.describe(
         agent="The AI agent to set the prompt for",
         prompt="The new system prompt to use"
@@ -102,7 +102,7 @@ class HelpCog(commands.Cog, name="Help"):
             await ctx.send("❌ Error setting system prompt")
 
     @commands.hybrid_command(name="reset_system_prompt", with_app_command=True)
-    @commands.has_permissions(administrator=True)
+    @commands.has_role("Bot Tender")
     @discord.app_commands.describe(agent="The AI agent to reset the prompt for")
     async def reset_system_prompt(self, ctx, agent: str):
         """Reset an AI agent's system prompt to its default value."""
@@ -232,10 +232,10 @@ class HelpCog(commands.Cog, name="Help"):
 3. Use `/listmodels` or `!listmodels` to see a simple list of available models
 4. Use `/list_agents` or `!list_agents` to get detailed information about each agent
 5. For private responses, you can DM the bot directly
-6. To activate the bot in a channel, use `/activate` or `!activate` (Admin only)
-7. Customize system prompts per channel using `/set_system_prompt` or `!set_system_prompt` (Admin only)
+6. To activate the bot in a channel, use `/activate` or `!activate` (Bot Tender role required)
+7. Customize system prompts per channel using `/set_system_prompt` or `!set_system_prompt` (Bot Tender role required)
 8. Use `/getcontext` or `!getcontext` to view the current context window size
-9. Manage conversation context with `/setcontext`, `/resetcontext`, and `/clearcontext` (Admin only)
+9. Manage conversation context with `/setcontext`, `/resetcontext`, and `/clearcontext` (Bot Tender role required)
 10. Use `/hook` or `!hook` to send responses through Discord webhooks
 
 **Available Commands:**
@@ -244,16 +244,16 @@ All commands support both slash (/) and prefix (!) formats:
 • `/listmodels` - Show all available models (simple list)
 • `/list_agents` - Show all available agents with detailed info
 • `/show_uptime` - Show how long the bot has been running
-• `/set_system_prompt <agent> <prompt>` - Set a custom system prompt for an AI agent (Admin only)
-• `/reset_system_prompt <agent>` - Reset an AI agent's system prompt to default (Admin only)
-• `/setcontext <size>` - Set the number of previous messages to include in context (Admin only)
+• `/set_system_prompt <agent> <prompt>` - Set a custom system prompt for an AI agent (Bot Tender role required)
+• `/reset_system_prompt <agent>` - Reset an AI agent's system prompt to default (Bot Tender role required)
+• `/setcontext <size>` - Set the number of previous messages to include in context (Bot Tender role required)
 • `/getcontext` - View current context window size
-• `/resetcontext` - Reset context window to default size (Admin only)
-• `/clearcontext [hours]` - Clear conversation history, optionally specify hours (Admin only)
-• `/activate` - Make the bot respond to every message in the current channel (Admin only)
-• `/deactivate` - Deactivate the bot's response to every message in the current channel (Admin only)
+• `/resetcontext` - Reset context window to default size (Bot Tender role required)
+• `/clearcontext [hours]` - Clear conversation history, optionally specify hours (Bot Tender role required)
+• `/activate` - Make the bot respond to every message in the current channel (Bot Tender role required)
+• `/deactivate` - Deactivate the bot's response to every message in the current channel (Bot Tender role required)
 • `/hook <message>` - Send a response through configured Discord webhooks
-• `/list_activated` - List all activated channels in the current server (Admin only)
+• `/list_activated` - List all activated channels in the current server (Bot Tender role required)
 
 **System Prompt Variables:**
 When setting custom system prompts, you can use these variables:
@@ -385,7 +385,7 @@ When setting custom system prompts, you can use these variables:
             await ctx.reply("❌ No LLM cog responded to the message")
 
     @commands.hybrid_command(name="list_activated")
-    @commands.has_permissions(administrator=True)
+    @commands.has_role("Bot Tender")
     @commands.guild_only()
     async def list_activated_channels(self, ctx):
         """List all activated channels in the current server. Use /list_activated or !list_activated"""
@@ -407,6 +407,17 @@ When setting custom system prompts, you can use these variables:
         except Exception as e:
             logging.error(f"[Help] Error listing activated channels: {e}")
             await ctx.reply("❌ Failed to list activated channels. Please try again.")
+
+    @set_system_prompt.error
+    @reset_system_prompt.error
+    @list_activated_channels.error
+    async def admin_command_error(self, ctx, error):
+        """Handle errors for admin commands"""
+        if isinstance(error, commands.MissingRole):
+            await ctx.send("❌ You need the Bot Tender role to use this command.", ephemeral=True)
+        else:
+            logging.error(f"[Help] Error in admin command: {str(error)}")
+            await ctx.send("❌ An error occurred while processing your request.", ephemeral=True)
 
     async def cog_load(self):
         """Called when the cog is loaded. Sync slash commands."""

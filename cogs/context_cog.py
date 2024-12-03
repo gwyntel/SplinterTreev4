@@ -10,6 +10,13 @@ from typing import List, Dict, Optional
 import textwrap
 from openai import OpenAI
 
+def is_bot_tender():
+    async def predicate(ctx):
+        if not ctx.guild:
+            return False
+        return discord.utils.get(ctx.author.roles, name="Bot Tender") is not None
+    return commands.check(predicate)
+
 class ContextCog(commands.Cog):
     def __init__(self, bot, db_path=None):
         self.bot = bot
@@ -77,7 +84,7 @@ class ContextCog(commands.Cog):
             await ctx.send("❌ Error getting context window size")
 
     @commands.hybrid_command(name='setcontext', with_app_command=True)
-    @commands.has_permissions(manage_messages=True)
+    @is_bot_tender()
     @discord.app_commands.describe(size="Number of messages to keep in context")
     async def set_context_command(self, ctx, size: int):
         """Set the context window size. Use /setcontext <size> or !setcontext <size>"""
@@ -98,7 +105,7 @@ class ContextCog(commands.Cog):
             await ctx.send("❌ Error setting context window size")
 
     @commands.hybrid_command(name='resetcontext', with_app_command=True)
-    @commands.has_permissions(manage_messages=True)
+    @is_bot_tender()
     async def reset_context_command(self, ctx):
         """Reset context window size to default. Use /resetcontext or !resetcontext"""
         try:
@@ -112,7 +119,7 @@ class ContextCog(commands.Cog):
             await ctx.send("❌ Error resetting context window size")
 
     @commands.hybrid_command(name='clearcontext', with_app_command=True)
-    @commands.has_permissions(manage_messages=True)
+    @is_bot_tender()
     @discord.app_commands.describe(hours="Number of hours of history to clear (optional)")
     async def clear_context_command(self, ctx, hours: int = None):
         """Clear conversation history. Use /clearcontext [hours] or !clearcontext [hours]"""

@@ -15,7 +15,7 @@ A powerful Discord bot that provides access to multiple AI language models with 
 - **Response Reroll**: Button to generate alternative responses if needed.
 - **Universal Image Processing**: Automatic image description and analysis for all models, even if they don't have native vision support.
 - **File Handling**: Support for text files and images, with automatic content extraction.
-- **Administrative Commands**: Manage bot status and channel configurations using **ManagementCog**.
+- **Role-Based Access Control**: Manage bot features using the Bot Tender role for permissions.
 - **Enhanced Error Handling and Logging**: Improved error reporting for better troubleshooting and maintenance.
 - **Webhook Integration**: Send responses through configured Discord webhooks using the **WebhookCog**.
 - **Agent Cloning**: Create custom variants of existing agents with unique system prompts.
@@ -63,8 +63,8 @@ This section details the individual cogs responsible for interacting with specif
 ### Management Cogs
 
 1. **ManagementCog** (`management_cog.py`)
-   - Administrative commands.
-   - Bot status management.
+   - Bot Tender role commands
+   - Bot status management
    - Channel configuration. See above for details.
 
 2. **WebhookCog** (`cogs/webhook_cog.py`)
@@ -75,24 +75,24 @@ This section details the individual cogs responsible for interacting with specif
 
 ## 🔧 Commands
 
-**Note**: Commands are prefixed with `` and may require administrative permissions.
+**Note**: Commands are prefixed with `` and require the Bot Tender role for management functions.
 
 - **`help`**: Show help message with a list of features and commands.
 - **`listmodels`**: Show all available models (simple list).
 - **`list_agents`**: Show all available agents with detailed info.
 - **`uptime`**: Show how long the bot has been running.
-- **`set_system_prompt <agent> <prompt>`**: Set a custom system prompt for an AI agent (Admin only).
-- **`reset_system_prompt <agent>`**: Reset an AI agent's system prompt to default (Admin only).
-- **`setcontext <size>`**: Set the number of previous messages to include in context (Admin only).
+- **`set_system_prompt <agent> <prompt>`**: Set a custom system prompt for an AI agent (Bot Tender role required).
+- **`reset_system_prompt <agent>`**: Reset an AI agent's system prompt to default (Bot Tender role required).
+- **`setcontext <size>`**: Set the number of previous messages to include in context (Bot Tender role required).
 - **`getcontext`**: View current context window size.
-- **`resetcontext`**: Reset context window to default size (Admin only).
-- **`clearcontext [hours]`**: Clear conversation history, optionally specify hours (Admin only).
-- **`router_activate`**: Activate the router to respond to all messages in the current channel (Admin only).
-- **`router_deactivate`**: Deactivate the router in the current channel (Admin only).
+- **`resetcontext`**: Reset context window to default size (Bot Tender role required).
+- **`clearcontext [hours]`**: Clear conversation history, optionally specify hours (Bot Tender role required).
+- **`router_activate`**: Activate the router to respond to all messages in the current channel (Bot Tender role required).
+- **`router_deactivate`**: Deactivate the router in the current channel (Bot Tender role required).
 - **`hook <message>`**: Send a response through configured Discord webhooks.
-- **`channel_activate`**: Make the bot respond to every message in the current channel (Admin only).
-- **`channel_deactivate`**: Deactivate the bot's response to every message in the current channel (Admin only).
-- **`list_activated`**: List all activated channels in the current server (Admin only).
+- **`channel_activate`**: Make the bot respond to every message in the current channel (Bot Tender role required).
+- **`channel_deactivate`**: Deactivate the bot's response to every message in the current channel (Bot Tender role required).
+- **`list_activated`**: List all activated channels in the current server (Bot Tender role required).
 
 ## 📚 System Prompt Variables
 
@@ -173,7 +173,7 @@ This cog provides the base functionality for other cogs, including message handl
 
 ### ManagementCog (`cogs/management_cog.py`)
 
-This cog provides administrative commands for managing the bot and its settings. See above for details.
+This cog provides Bot Tender role commands for managing the bot and its settings. See above for details.
 
 ### RouterCog (`cogs/router_cog.py`)
 

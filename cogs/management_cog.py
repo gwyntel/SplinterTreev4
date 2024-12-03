@@ -86,7 +86,7 @@ class ManagementCog(BaseCog):
             return False
 
     @commands.hybrid_command(name="activate", description="Activate bot responses in this channel")
-    @commands.has_permissions(administrator=True)
+    @commands.has_role("Bot Tender")
     async def activate(self, ctx):
         """Activate bot responses in the current channel"""
         try:
@@ -99,7 +99,7 @@ class ManagementCog(BaseCog):
             await ctx.send("❌ An error occurred while processing your request.", ephemeral=True)
 
     @commands.hybrid_command(name="deactivate", description="Deactivate bot responses in this channel")
-    @commands.has_permissions(administrator=True)
+    @commands.has_role("Bot Tender")
     async def deactivate(self, ctx):
         """Deactivate bot responses in the current channel"""
         try:
@@ -127,8 +127,8 @@ class ManagementCog(BaseCog):
     @deactivate.error
     async def admin_command_error(self, ctx, error):
         """Handle errors for admin commands"""
-        if isinstance(error, commands.MissingPermissions):
-            await ctx.send("❌ You need administrator permissions to use this command.", ephemeral=True)
+        if isinstance(error, commands.MissingRole):
+            await ctx.send("❌ You need the Bot Tender role to use this command.", ephemeral=True)
         else:
             logging.error(f"Error in admin command: {str(error)}")
             await ctx.send("❌ An error occurred while processing your request.", ephemeral=True)
