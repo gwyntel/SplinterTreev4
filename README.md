@@ -75,24 +75,29 @@ This section details the individual cogs responsible for interacting with specif
 
 ## 🔧 Commands
 
-**Note**: Commands are prefixed with `` and require the Bot Tender role for management functions.
+**Note**: Commands are available both as slash commands (/) and text commands (!) where applicable.
 
+### General Commands
 - **`help`**: Show help message with a list of features and commands.
 - **`listmodels`**: Show all available models (simple list).
 - **`list_agents`**: Show all available agents with detailed info.
 - **`uptime`**: Show how long the bot has been running.
-- **`set_system_prompt <agent> <prompt>`**: Set a custom system prompt for an AI agent (Bot Tender role required).
-- **`reset_system_prompt <agent>`**: Reset an AI agent's system prompt to default (Bot Tender role required).
-- **`setcontext <size>`**: Set the number of previous messages to include in context (Bot Tender role required).
+- **`optout`** or **`!optout`**: Opt out of all bot interactions.
+- **`optin`** or **`!optin`**: Opt back in to bot interactions after opting out.
+
+### Bot Tender Role Commands
+- **`activate`** or **`!activate`**: Activate bot responses in the current channel.
+- **`deactivate`** or **`!deactivate`**: Deactivate bot responses in the current channel.
+- **`set_system_prompt <agent> <prompt>`**: Set a custom system prompt for an AI agent.
+- **`reset_system_prompt <agent>`**: Reset an AI agent's system prompt to default.
+- **`setcontext <size>`**: Set the number of previous messages to include in context.
 - **`getcontext`**: View current context window size.
-- **`resetcontext`**: Reset context window to default size (Bot Tender role required).
-- **`clearcontext [hours]`**: Clear conversation history, optionally specify hours (Bot Tender role required).
-- **`router_activate`**: Activate the router to respond to all messages in the current channel (Bot Tender role required).
-- **`router_deactivate`**: Deactivate the router in the current channel (Bot Tender role required).
+- **`resetcontext`**: Reset context window to default size.
+- **`clearcontext [hours]`**: Clear conversation history, optionally specify hours.
+- **`router_activate`**: Activate the router to respond to all messages in the current channel.
+- **`router_deactivate`**: Deactivate the router in the current channel.
 - **`hook <message>`**: Send a response through configured Discord webhooks.
-- **`channel_activate`**: Make the bot respond to every message in the current channel (Bot Tender role required).
-- **`channel_deactivate`**: Deactivate the bot's response to every message in the current channel (Bot Tender role required).
-- **`list_activated`**: List all activated channels in the current server (Bot Tender role required).
+- **`list_activated`**: List all activated channels in the current server.
 
 ## 📚 System Prompt Variables
 

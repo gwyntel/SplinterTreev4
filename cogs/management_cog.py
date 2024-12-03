@@ -51,6 +51,19 @@ class ManagementCog(BaseCog):
             logging.error(f"Error banning user: {str(e)}")
             return False
 
+    async def unban_user(self, user_id: str) -> bool:
+        """Remove a user from the banned users table"""
+        try:
+            db = sqlite3.connect('databases/interaction_logs.db')
+            cursor = db.cursor()
+            cursor.execute('DELETE FROM banned_users WHERE user_id = ?', (str(user_id),))
+            db.commit()
+            db.close()
+            return True
+        except Exception as e:
+            logging.error(f"Error unbanning user: {str(e)}")
+            return False
+
     async def activate_channel(self, channel_id: str, guild_id: str, user_id: str) -> bool:
         """Activate bot responses in a channel"""
         try:
@@ -123,6 +136,18 @@ class ManagementCog(BaseCog):
             logging.error(f"Error in optout command: {str(e)}")
             await ctx.send("❌ An error occurred while processing your request.", ephemeral=True)
 
+    @commands.hybrid_command(name="optin", description="Opt in to bot interactions")
+    async def optin(self, ctx):
+        """Opt in to bot interactions"""
+        try:
+            if await self.unban_user(str(ctx.author.id)):
+                await ctx.send(f"✅ {ctx.author.mention} has been opted in to bot interactions. Your messages will now be processed and stored.", ephemeral=True)
+            else:
+                await ctx.send("❌ Failed to opt in. Please try again later.", ephemeral=True)
+        except Exception as e:
+            logging.error(f"Error in optin command: {str(e)}")
+            await ctx.send("❌ An error occurred while processing your request.", ephemeral=True)
+
     @activate.error
     @deactivate.error
     async def admin_command_error(self, ctx, error):
@@ -135,13 +160,28 @@ class ManagementCog(BaseCog):
 
     @commands.Cog.listener()
     async def on_message(self, message):
-        """Handle !optout command"""
+        """Handle !optout, !optin, !activate, and !deactivate commands"""
         if message.author.bot:
             return
 
         if message.content.lower() == "!optout":
             ctx = await self.bot.get_context(message)
             await self.optout(ctx)
+        elif message.content.lower() == "!optin":
+            ctx = await self.bot.get_context(message)
+            await self.optin(ctx)
+        elif message.content.lower() == "!activate":
+            ctx = await self.bot.get_context(message)
+            if "Bot Tender" in [role.name for role in message.author.roles]:
+                await self.activate(ctx)
+            else:
+                await message.channel.send("❌ You need the Bot Tender role to use this command.", ephemeral=True)
+        elif message.content.lower() == "!deactivate":
+            ctx = await self.bot.get_context(message)
+            if "Bot Tender" in [role.name for role in message.author.roles]:
+                await self.deactivate(ctx)
+            else:
+                await message.channel.send("❌ You need the Bot Tender role to use this command.", ephemeral=True)
 
     async def generate_response(self, message):
         """Generate a response using openrouter"""
