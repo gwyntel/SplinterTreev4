@@ -85,6 +85,9 @@ class RouterCog(BaseCog):
         except FileNotFoundError:
             logging.error("[Router] System prompt file not found.")
             return ""
+        except Exception as e:
+            logging.error(f"[Router] Error loading system prompt: {e}")
+            return ""
 
     async def is_channel_activated(self, channel_id: str, guild_id: str) -> bool:
         """Check if a channel is activated for bot interactions"""
@@ -294,11 +297,33 @@ class RouterCog(BaseCog):
                                 await message.guild.me.edit(nick=cog.name)
                                 logging.info(f"[Router] Updated nickname to {cog.name}")
                             except discord.Forbidden:
-                                logging.error(f"[Router] Missing permissions to update nickname")
+                                logging.error("[Router] Missing permissions to update nickname")
                             except Exception as e:
                                 logging.error(f"[Router] Error updating nickname: {str(e)}")
                         
                         # Forward the message to the cog
                         await cog.handle_message(message)
                     else:
-                        logging.error(f"[Router] Cog '{cog_name}
+                        logging.error(f"[Router] Cog '{cog_name}' not found or missing handle_message method")
+                        # Default to GPT4 if cog not found
+                        fallback_cog = self.bot.get_cog("GPT4Cog")
+                        if fallback_cog and hasattr(fallback_cog, 'handle_message'):
+                            logging.info("[Router] Using GPT4 as fallback")
+                            await fallback_cog.handle_message(message)
+                        else:
+                            logging.error("[Router] GPT4 fallback cog not found")
+                except Exception as e:
+                    logging.error(f"[Router] Error in route_message inner try block: {str(e)}")
+                    raise
+        except Exception as e:
+            logging.error(f"[Router] Error in route_message: {str(e)}")
+            # Attempt to use GPT4 as fallback on error
+            try:
+                fallback_cog = self.bot.get_cog("GPT4Cog")
+                if fallback_cog and hasattr(fallback_cog, 'handle_message'):
+                    logging.info("[Router] Using GPT4 as error fallback")
+                    await fallback_cog.handle_message(message)
+                else:
+                    logging.error("[Router] GPT4 error fallback cog not found")
+            except Exception as fallback_error:
+                logging.error(f"[Router] Error in fallback handler: {str(fallback_error)}")
