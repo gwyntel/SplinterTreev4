@@ -17,7 +17,7 @@ class RouterCog(BaseCog):
             name="Router",
             nickname="Router",
             trigger_words=[],
-            model="openpipe:openrouter/mistralai/ministral-8b",
+            model="openpipe:openrouter/meta-llama/llama-3.2-3b-instruct",
             provider="openpipe",
             prompt_file="router",
             supports_vision=False
@@ -66,9 +66,10 @@ class RouterCog(BaseCog):
             'nemotron': 'Nemotron',
             'magnum': 'Magnum',
             'inferor': 'Inferor',
-            'sydney': 'SYDNEY-COURT',
-            'sydney-court': 'SYDNEY-COURT',
-            'sydneycourt': 'SYDNEY-COURT'
+            'sydney': 'Sydney',
+            'sydney-court': 'Sydney',
+            'sydneycourt': 'Sydney',
+            'SYDNEY-COURT': 'Sydney'
         }
 
     def get_temperature(self):
@@ -300,89 +301,4 @@ class RouterCog(BaseCog):
                         # Forward the message to the cog
                         await cog.handle_message(message)
                     else:
-                        logging.error(f"[Router] Cog '{cog_name}' not found or 'handle_message' not implemented")
-                        # Default to GPT4 if cog not found
-                        fallback_cog = self.bot.get_cog("GPT4Cog")
-                        if fallback_cog and hasattr(fallback_cog, 'handle_message'):
-                            logging.info("[Router] Falling back to GPT4Cog")
-                            # Update bot's nickname before falling back
-                            if message.guild:
-                                try:
-                                    await message.guild.me.edit(nick=fallback_cog.name)
-                                    logging.info(f"[Router] Updated nickname to {fallback_cog.name}")
-                                except discord.Forbidden:
-                                    logging.error(f"[Router] Missing permissions to update nickname")
-                                except Exception as e:
-                                    logging.error(f"[Router] Error updating nickname: {str(e)}")
-                            
-                            await fallback_cog.handle_message(message)
-                        else:
-                            await message.reply("❌ Unable to route message to the appropriate module.")
-
-                except Exception as e:
-                    logging.error(f"[Router] API error: {str(e)}")
-                    # Attempt to fallback to GPT4
-                    fallback_cog = self.bot.get_cog("GPT4Cog")
-                    if fallback_cog and hasattr(fallback_cog, 'handle_message'):
-                        logging.info("[Router] Falling back to GPT4Cog due to API error")
-                        # Update bot's nickname before falling back
-                        if message.guild:
-                            try:
-                                await message.guild.me.edit(nick=fallback_cog.name)
-                                logging.info(f"[Router] Updated nickname to {fallback_cog.name}")
-                            except discord.Forbidden:
-                                logging.error(f"[Router] Missing permissions to update nickname")
-                            except Exception as e:
-                                logging.error(f"[Router] Error updating nickname: {str(e)}")
-                        
-                        await fallback_cog.handle_message(message)
-                    else:
-                        await message.reply("❌ An error occurred while processing your message. Please try again later.")
-
-        except Exception as e:
-            logging.error(f"[Router] Error routing message: {str(e)}")
-            await message.reply("❌ An error occurred while processing your message.")
-
-    @commands.Cog.listener()
-    async def on_message(self, message):
-        """Handle incoming messages"""
-        # Ignore messages from bots
-        if message.author.bot:
-            return
-
-        # Check if message has already been handled
-        if message.id in self.handled_messages:
-            return
-
-        # Check if message mentions other bots
-        if self._mentions_other_bot(message):
-            return
-
-        # Always process DMs
-        is_dm = isinstance(message.channel, discord.DMChannel)
-        if is_dm:
-            await self.route_message(message)
-            return
-
-        # Check if message mentions the bot
-        is_mention = self.bot.user in message.mentions
-        if is_mention:
-            await self.route_message(message)
-            return
-
-        # Check if channel is activated for guild messages
-        if message.guild:
-            if await self.is_channel_activated(str(message.channel.id), str(message.guild.id)):
-                # Check for specific keywords that would trigger other cogs
-                for cog in self.bot.cogs.values():
-                    if hasattr(cog, 'trigger_words') and any(word.lower() in message.content.lower() for word in cog.trigger_words):
-                        return  # Let other cogs handle their specific triggers
-                await self.route_message(message)
-
-    async def cog_load(self):
-        """Called when the cog is loaded."""
-        await super().cog_load()
-        logging.info("[Router] Cog loaded and commands synced successfully.")
-
-async def setup(bot):
-    await bot.add_cog(RouterCog(bot))
+                        logging.error(f"[Router] Cog '{cog_name}
