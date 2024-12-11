@@ -39,6 +39,7 @@ class ContextCog(commands.Cog):
                 guild_id TEXT,
                 user_id TEXT NOT NULL,
                 content TEXT NOT NULL,
+                raw_content TEXT NOT NULL,
                 is_assistant BOOLEAN NOT NULL
             )
             ''')
@@ -47,18 +48,19 @@ class ContextCog(commands.Cog):
         except Exception as e:
             logging.error(f"Failed to set up database: {str(e)}")
 
-    async def get_context_messages(self, channel_id: str, limit: int = 50) -> List[Dict]:
+    async def get_context_messages(self, channel_id: str, limit: int = 50, exclude_message_id: Optional[str] = None) -> List[Dict]:
         """Retrieve the last N messages for context."""
         try:
             cursor = self._db.cursor()
             query = '''
-            SELECT discord_message_id, user_id, content, is_assistant, timestamp
+            SELECT discord_message_id, user_id, content, raw_content, is_assistant, timestamp
             FROM messages
             WHERE channel_id = ?
+            AND (? IS NULL OR discord_message_id != ?)
             ORDER BY timestamp DESC
             LIMIT ?
             '''
-            cursor.execute(query, (channel_id, limit))
+            cursor.execute(query, (channel_id, exclude_message_id, exclude_message_id, limit))
             rows = cursor.fetchall()
             messages = []
             for row in rows:
@@ -67,8 +69,9 @@ class ContextCog(commands.Cog):
                         'id': row[0],
                         'user_id': row[1],
                         'content': row[2],
-                        'is_assistant': bool(row[3]),
-                        'timestamp': row[4]
+                        'raw_content': row[3],
+                        'is_assistant': bool(row[4]),
+                        'timestamp': row[5]
                     })
             return messages[::-1]  # Reverse to chronological order
         except Exception as e:
@@ -83,9 +86,9 @@ class ContextCog(commands.Cog):
             self.message_ids.add(message_id)
             cursor = self._db.cursor()
             cursor.execute('''
-            INSERT INTO messages (discord_message_id, channel_id, guild_id, user_id, content, is_assistant)
-            VALUES (?, ?, ?, ?, ?, ?)
-            ''', (message_id, channel_id, guild_id, user_id, content, is_assistant))
+            INSERT INTO messages (discord_message_id, channel_id, guild_id, user_id, content, raw_content, is_assistant)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (message_id, channel_id, guild_id, user_id, content, content, is_assistant))  # Use content for raw_content
             self._db.commit()
         except Exception as e:
             logging.error(f"Failed to add message to context: {str(e)}")
