@@ -282,8 +282,14 @@ class BaseCog(commands.Cog):
                 try:
                     async for chunk in response_stream:
                         if chunk:
+                            # Store raw response without prefix
                             response += chunk
-                            current_chunk += chunk
+                            
+                            # Format chunk with model prefix if it's the first chunk
+                            if not current_chunk.strip():
+                                current_chunk = f"[{self.name}] {chunk}"
+                            else:
+                                current_chunk += chunk
                             
                             # Check if it's time to update (every 0.5 seconds)
                             current_time = time.time()
@@ -358,12 +364,13 @@ class BaseCog(commands.Cog):
                     if self.context_cog and message.guild:
                         try:
                             guild_id = str(message.guild.id) if message.guild else None
+                            # Send both formatted and raw response to context_cog
                             await self.context_cog.add_message_to_context(
                                 sent_messages[-1].id,
                                 str(message.channel.id),
                                 guild_id,
                                 str(self.bot.user.id),
-                                response,  # Response content without prefix
+                                current_chunk,  # Send full formatted response
                                 True,  # is_assistant
                                 self.name,  # persona_name
                                 emotion  # emotion
@@ -379,7 +386,7 @@ class BaseCog(commands.Cog):
                                 guild_id=message.guild.id if message.guild else None,
                                 persona_name=self.name,
                                 user_message=modified_content,
-                                assistant_reply=response,
+                                assistant_reply=current_chunk,  # Log full formatted response
                                 emotion=emotion,
                                 channel_id=message.channel.id
                             )
