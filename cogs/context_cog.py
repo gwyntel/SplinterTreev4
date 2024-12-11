@@ -1,14 +1,11 @@
 import discord
 from discord.ext import commands
-from config import CONTEXT_WINDOWS, DEFAULT_CONTEXT_WINDOW, MAX_CONTEXT_WINDOW, OPENPIPE_API_KEY, OPENPIPE_API_URL
+from config import CONTEXT_WINDOWS, DEFAULT_CONTEXT_WINDOW, MAX_CONTEXT_WINDOW
 import sqlite3
 import json
 import logging
 from datetime import datetime, timedelta
-import asyncio
 from typing import List, Dict, Optional
-import textwrap
-from openai import OpenAI
 
 def is_bot_tender():
     async def predicate(ctx):
@@ -21,389 +18,156 @@ class ContextCog(commands.Cog):
     def __init__(self, bot, db_path=None):
         self.bot = bot
         self.db_path = db_path or 'databases/interaction_logs.db'
-        self._db = None  # Database connection will be set by test fixture or created in _setup_database
-        self.summary_chunk_hours = 24
-        self.last_summary_check = {}
-        self.openai_client = OpenAI(
-            base_url=OPENPIPE_API_URL,
-            api_key=OPENPIPE_API_KEY
-        )
-        self.last_messages = {}
-        self.current_stream = {}
-        self.message_cache = {}  # Add message cache
-        self.cache_timeout = 300  # 5 minutes cache timeout
-        self._setup_database()  # Call synchronously after all attributes are set
+        self._db = None
+        self._setup_database()
+        self.context_windows = CONTEXT_WINDOWS
+        self.default_context_window = DEFAULT_CONTEXT_WINDOW
+        self.max_context_window = MAX_CONTEXT_WINDOW
+        self.message_ids = set()  # Track added message IDs
 
     def _setup_database(self):
-        """Setup the database synchronously"""
+        """Setup the database synchronously."""
         try:
-            if not self._db:
-                self._db = sqlite3.connect(self.db_path, check_same_thread=False)
-                cursor = self._db.cursor()
-                cursor.execute('''
-                CREATE TABLE IF NOT EXISTS messages (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    discord_message_id TEXT UNIQUE,
-                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    channel_id TEXT NOT NULL,
-                    guild_id TEXT,
-                    user_id TEXT NOT NULL,
-                    persona_name TEXT,
-                    content TEXT NOT NULL,
-                    raw_content TEXT NOT NULL,
-                    is_assistant BOOLEAN NOT NULL,
-                    parent_message_id INTEGER,
-                    emotion TEXT,
-                    FOREIGN KEY (parent_message_id) REFERENCES messages(id)
-                )
-                ''')
-                self._db.commit()
-            logging.info("Database setup completed successfully")
+            self._db = sqlite3.connect(self.db_path, check_same_thread=False)
+            cursor = self._db.cursor()
+            cursor.execute('''
+            CREATE TABLE IF NOT EXISTS messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                discord_message_id TEXT UNIQUE,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                channel_id TEXT NOT NULL,
+                guild_id TEXT,
+                user_id TEXT NOT NULL,
+                content TEXT NOT NULL,
+                is_assistant BOOLEAN NOT NULL
+            )
+            ''')
+            self._db.commit()
+            logging.info("Database setup completed successfully.")
         except Exception as e:
             logging.error(f"Failed to set up database: {str(e)}")
 
+    async def get_context_messages(self, channel_id: str, limit: int = 50) -> List[Dict]:
+        """Retrieve the last N messages for context."""
+        try:
+            cursor = self._db.cursor()
+            query = '''
+            SELECT discord_message_id, user_id, content, is_assistant, timestamp
+            FROM messages
+            WHERE channel_id = ?
+            ORDER BY timestamp DESC
+            LIMIT ?
+            '''
+            cursor.execute(query, (channel_id, limit))
+            rows = cursor.fetchall()
+            messages = []
+            for row in rows:
+                if row[0] not in self.message_ids:  # Skip already added messages
+                    messages.append({
+                        'id': row[0],
+                        'user_id': row[1],
+                        'content': row[2],
+                        'is_assistant': bool(row[3]),
+                        'timestamp': row[4]
+                    })
+            return messages[::-1]  # Reverse to chronological order
+        except Exception as e:
+            logging.error(f"Failed to retrieve context messages: {str(e)}")
+            return []
+
+    async def add_message_to_context(self, message_id: str, channel_id: str, guild_id: str, user_id: str, content: str, is_assistant: bool):
+        """Add a message to the context."""
+        try:
+            if message_id in self.message_ids:
+                return  # Skip if already added
+            self.message_ids.add(message_id)
+            cursor = self._db.cursor()
+            cursor.execute('''
+            INSERT INTO messages (discord_message_id, channel_id, guild_id, user_id, content, is_assistant)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ''', (message_id, channel_id, guild_id, user_id, content, is_assistant))
+            self._db.commit()
+        except Exception as e:
+            logging.error(f"Failed to add message to context: {str(e)}")
+
     def _save_context_windows(self):
+        """Save context window settings to a file."""
         try:
             with open('context_windows.json', 'w') as f:
-                json.dump({
-                    "DEFAULT_CONTEXT_WINDOW": DEFAULT_CONTEXT_WINDOW,
-                    "CONTEXT_WINDOWS": CONTEXT_WINDOWS
-                }, f, indent=2)
-            logging.info("Saved context window settings")
+                json.dump(self.context_windows, f, indent=2)
+            logging.info("Saved context window settings.")
         except Exception as e:
             logging.error(f"Error saving context settings: {str(e)}")
 
     @commands.hybrid_command(name='getcontext', with_app_command=True)
     async def get_context_command(self, ctx):
-        """View current context window size. Use /getcontext or !getcontext"""
+        """View current context window size."""
         try:
             channel_id = str(ctx.channel.id)
-            size = CONTEXT_WINDOWS.get(channel_id, DEFAULT_CONTEXT_WINDOW)
+            size = self.context_windows.get(channel_id, self.default_context_window)
             await ctx.send(f"Current context window size: {size} messages")
         except Exception as e:
-            logging.error(f"[Context] Error getting context size: {str(e)}")
+            logging.error(f"Error getting context size: {str(e)}")
             await ctx.send("❌ Error getting context window size")
 
     @commands.hybrid_command(name='setcontext', with_app_command=True)
     @is_bot_tender()
-    @discord.app_commands.describe(size="Number of messages to keep in context")
     async def set_context_command(self, ctx, size: int):
-        """Set the context window size. Use /setcontext <size> or !setcontext <size>"""
+        """Set the context window size."""
         try:
             if size < 1:
                 await ctx.send("❌ Context window size must be at least 1")
                 return
-            if size > MAX_CONTEXT_WINDOW:
-                await ctx.send(f"❌ Context window size cannot exceed {MAX_CONTEXT_WINDOW}")
+            if size > self.max_context_window:
+                await ctx.send(f"❌ Context window size cannot exceed {self.max_context_window}")
                 return
 
             channel_id = str(ctx.channel.id)
-            CONTEXT_WINDOWS[channel_id] = size
+            self.context_windows[channel_id] = size
             self._save_context_windows()
             await ctx.send(f"✅ Context window size set to {size} messages")
         except Exception as e:
-            logging.error(f"[Context] Error setting context size: {str(e)}")
+            logging.error(f"Error setting context size: {str(e)}")
             await ctx.send("❌ Error setting context window size")
 
     @commands.hybrid_command(name='resetcontext', with_app_command=True)
     @is_bot_tender()
     async def reset_context_command(self, ctx):
-        """Reset context window size to default. Use /resetcontext or !resetcontext"""
+        """Reset context window size to default."""
         try:
             channel_id = str(ctx.channel.id)
-            if channel_id in CONTEXT_WINDOWS:
-                del CONTEXT_WINDOWS[channel_id]
+            if channel_id in self.context_windows:
+                del self.context_windows[channel_id]
                 self._save_context_windows()
-            await ctx.send(f"✅ Context window size reset to default ({DEFAULT_CONTEXT_WINDOW} messages)")
+            await ctx.send(f"✅ Context window size reset to default ({self.default_context_window} messages)")
         except Exception as e:
-            logging.error(f"[Context] Error resetting context size: {str(e)}")
+            logging.error(f"Error resetting context size: {str(e)}")
             await ctx.send("❌ Error resetting context window size")
 
     @commands.hybrid_command(name='clearcontext', with_app_command=True)
     @is_bot_tender()
-    @discord.app_commands.describe(hours="Number of hours of history to clear (optional)")
     async def clear_context_command(self, ctx, hours: int = None):
-        """Clear conversation history. Use /clearcontext [hours] or !clearcontext [hours]"""
+        """Clear conversation history."""
         try:
             channel_id = str(ctx.channel.id)
-            
             cursor = self._db.cursor()
-            
             if hours:
                 cutoff_time = (datetime.now() - timedelta(hours=hours)).isoformat()
-                cursor.execute('''
-                    DELETE FROM messages 
-                    WHERE channel_id = ? AND timestamp < ?
-                ''', (channel_id, cutoff_time))
+                cursor.execute('DELETE FROM messages WHERE channel_id = ? AND timestamp < ?', (channel_id, cutoff_time))
                 await ctx.send(f"✅ Cleared messages older than {hours} hours from context")
             else:
                 cursor.execute('DELETE FROM messages WHERE channel_id = ?', (channel_id,))
                 await ctx.send("✅ Cleared all messages from context")
-            
             self._db.commit()
-            
-            # Clear cache for this channel
-            cache_keys_to_remove = [k for k in self.message_cache if k.startswith(f"{channel_id}:")]
-            for key in cache_keys_to_remove:
-                self.message_cache.pop(key, None)
-                
         except Exception as e:
-            logging.error(f"[Context] Error clearing context: {str(e)}")
+            logging.error(f"Error clearing context: {str(e)}")
             await ctx.send("❌ Error clearing context")
-
-    async def get_context_messages(self, channel_id: str, limit: int = None, exclude_message_id: str = None, model_id: str = None) -> List[Dict]:
-        cache_key = f"{channel_id}:{limit}:{exclude_message_id}"
-        
-        # Check cache first
-        if cache_key in self.message_cache:
-            cache_entry = self.message_cache[cache_key]
-            if datetime.now().timestamp() - cache_entry['timestamp'] < self.cache_timeout:
-                messages = cache_entry['messages']
-                # Apply message alternation if needed
-                if model_id and "infermatic" in model_id.lower():
-                    messages = self._ensure_message_alternation(messages)
-                return messages
-        
-        try:
-            cursor = self._db.cursor()
-            window_size = min(50, limit) if limit is not None else 50
-            
-            query = '''
-            SELECT DISTINCT
-                m.discord_message_id,
-                m.user_id,
-                m.content,
-                m.raw_content,
-                m.is_assistant,
-                m.persona_name,
-                m.emotion,
-                m.timestamp
-            FROM messages m
-            WHERE m.channel_id = ?
-            AND (? IS NULL OR m.discord_message_id != ?)
-            AND m.content IS NOT NULL
-            AND m.content != ''
-            ORDER BY m.timestamp DESC
-            LIMIT ?
-            '''
-            
-            cursor.execute(query, (
-                channel_id,
-                exclude_message_id,
-                exclude_message_id,
-                window_size
-            ))
-            
-            messages = []
-            seen_contents = set()
-            
-            for row in cursor.fetchall():
-                content = row[2]
-                raw_content = row[3]
-                if not content or content.isspace() or content in seen_contents:
-                    continue
-                seen_contents.add(content)
-                
-                messages.append({
-                    'id': row[0],
-                    'user_id': row[1],
-                    'content': content,
-                    'raw_content': raw_content,
-                    'is_assistant': bool(row[4]),
-                    'persona_name': row[5],
-                    'emotion': row[6],
-                    'timestamp': row[7]
-                })
-            
-            messages.reverse()
-            
-            # Apply message alternation if needed
-            if model_id and "infermatic" in model_id.lower():
-                messages = self._ensure_message_alternation(messages)
-            
-            # Cache the results
-            self.message_cache[cache_key] = {
-                'messages': messages,
-                'timestamp': datetime.now().timestamp()
-            }
-            
-            return messages
-                
-        except Exception as e:
-            logging.error(f"Failed to get context messages: {str(e)}")
-            return []
-
-    def _ensure_message_alternation(self, messages: List[Dict]) -> List[Dict]:
-        """Ensure messages alternate between user and assistant by inserting placeholder assistant messages where needed."""
-        if not messages:
-            return messages
-
-        result = []
-        last_was_user = None
-
-        for msg in messages:
-            is_user = not msg['is_assistant']
-            
-            # If this is a user message and the last message was also from a user,
-            # insert a placeholder assistant message
-            if is_user and last_was_user:
-                result.append({
-                    'id': f"blank_{len(result)}",
-                    'user_id': None,
-                    'content': "[No response]",  # Placeholder message instead of empty string
-                    'raw_content': "[No response]",
-                    'is_assistant': True,
-                    'persona_name': None,
-                    'emotion': None,
-                    'timestamp': msg['timestamp']  # Use same timestamp as the user message
-                })
-            
-            result.append(msg)
-            last_was_user = is_user
-
-        return result
-
-    def _format_assistant_content(self, content: str, persona_name: str = None) -> tuple[str, str]:
-        """Format assistant content with persona prefix if needed."""
-        if not content:
-            return "", ""
-            
-        # Remove any existing model prefix
-        if persona_name and content.startswith(f"[{persona_name}]"):
-            raw_content = content[len(f"[{persona_name}]"):].strip()
-        else:
-            raw_content = content.strip()
-            
-        # Format the content with persona prefix
-        if persona_name:
-            formatted_content = f"[{persona_name}] {raw_content}"
-        else:
-            formatted_content = raw_content
-            
-        return formatted_content, raw_content
-
-    async def add_message_to_context(self, message_id, channel_id, guild_id, user_id, content, is_assistant, persona_name=None, emotion=None):
-        try:
-            if not content or content.isspace():
-                return
-
-            if is_assistant:
-                # Format content with persona prefix
-                formatted_content, raw_content = self._format_assistant_content(content, persona_name)
-
-                if channel_id not in self.current_stream:
-                    self.current_stream[channel_id] = {
-                        'content': formatted_content,
-                        'raw_content': raw_content,
-                        'message_id': message_id,
-                        'full_content': formatted_content,
-                        'full_raw_content': raw_content
-                    }
-                else:
-                    if message_id != self.current_stream[channel_id]['message_id']:
-                        # Start a new message stream
-                        self.current_stream[channel_id] = {
-                            'content': formatted_content,
-                            'raw_content': raw_content,
-                            'message_id': message_id,
-                            'full_content': formatted_content,
-                            'full_raw_content': raw_content
-                        }
-                    else:
-                        # Update the full content with the latest chunk
-                        self.current_stream[channel_id]['full_content'] = formatted_content
-                        self.current_stream[channel_id]['full_raw_content'] = raw_content
-
-                # Only store the message when streaming is complete
-                if '(edited)' in content:
-                    await self._store_message(
-                        message_id,
-                        channel_id,
-                        guild_id,
-                        user_id,
-                        self.current_stream[channel_id]['full_content'],
-                        self.current_stream[channel_id]['full_raw_content'],
-                        is_assistant,
-                        persona_name,
-                        emotion
-                    )
-                    # Remove the current stream as it's complete
-                    del self.current_stream[channel_id]
-                return
-
-            # For non-assistant messages, store directly but check for edits
-            if '(edited)' in content:
-                await self._store_message(message_id, channel_id, guild_id, user_id, content, content, is_assistant, persona_name, emotion)
-            else:
-                # Only store if it's a new message
-                cursor = self._db.cursor()
-                cursor.execute('SELECT content FROM messages WHERE discord_message_id = ?', (str(message_id),))
-                existing = cursor.fetchone()
-                if not existing:
-                    await self._store_message(message_id, channel_id, guild_id, user_id, content, content, is_assistant, persona_name, emotion)
-
-        except Exception as e:
-            logging.error(f"Failed to add message to context: {str(e)}")
-
-    async def _store_message(self, message_id, channel_id, guild_id, user_id, content, raw_content, is_assistant, persona_name=None, emotion=None):
-        try:
-            if not is_assistant:
-                last_msg = self.last_messages.get(channel_id, {}).get('user')
-                if last_msg and last_msg['content'] == content:
-                    return
-
-            if is_assistant:
-                prefixed_content = content
-            else:
-                try:
-                    user = await self.bot.fetch_user(int(user_id))
-                    username = user.display_name
-                    prefixed_content = f"{username}: {raw_content}"
-                except:
-                    prefixed_content = content
-
-            async with asyncio.Lock():
-                cursor = self._db.cursor()
-                
-                cursor.execute('''
-                INSERT OR REPLACE INTO messages 
-                (discord_message_id, channel_id, guild_id, user_id, content, raw_content, is_assistant, persona_name, emotion, timestamp)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (
-                    str(message_id), 
-                    str(channel_id), 
-                    str(guild_id) if guild_id else None, 
-                    str(user_id), 
-                    prefixed_content,
-                    raw_content,
-                    is_assistant, 
-                    persona_name, 
-                    emotion, 
-                    datetime.now().isoformat()
-                ))
-                
-                self._db.commit()
-
-            if channel_id not in self.last_messages:
-                self.last_messages[channel_id] = {}
-            self.last_messages[channel_id]['assistant' if is_assistant else 'user'] = {
-                'content': prefixed_content,
-                'timestamp': datetime.now()
-            }
-
-            # Clear relevant cache entries
-            cache_keys_to_remove = [k for k in self.message_cache if k.startswith(f"{channel_id}:")]
-            for key in cache_keys_to_remove:
-                self.message_cache.pop(key, None)
-
-        except Exception as e:
-            logging.error(f"Failed to store message in context: {str(e)}")
 
     @commands.Cog.listener()
     async def on_message(self, message):
+        """Listen for new messages and add them to the context."""
         if message.content.startswith('!') or message.content.startswith('/'):
             return
-
         try:
             guild_id = str(message.guild.id) if message.guild else None
             await self.add_message_to_context(
@@ -412,19 +176,10 @@ class ContextCog(commands.Cog):
                 guild_id,
                 str(message.author.id),
                 message.content,
-                False,
-                None,
-                None
+                False
             )
         except Exception as e:
             logging.error(f"Error in on_message: {e}")
-
-    async def cog_load(self):
-        try:
-            await self.bot.tree.sync()
-            logging.info("[Context] Slash commands synced successfully")
-        except Exception as e:
-            logging.error(f"[Context] Failed to sync slash commands: {e}")
 
 async def setup(bot):
     await bot.add_cog(ContextCog(bot))
