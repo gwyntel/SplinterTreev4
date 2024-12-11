@@ -263,94 +263,84 @@ class ContextCog(commands.Cog):
 
         return result
 
-    def _extract_persona_prefix(self, content: str) -> tuple[str, str]:
-        """Extract persona prefix from content if present."""
-        if ': ' in content:
-            parts = content.split(': ', 1)
-            if len(parts) == 2 and '[' in parts[0] and ']' in parts[0]:
-                return parts[0].strip(), parts[1].strip()
-        return None, content.strip()
+    def _format_assistant_content(self, content: str, persona_name: str = None) -> tuple[str, str]:
+        """Format assistant content with persona prefix if needed."""
+        if not content:
+            return "", ""
+            
+        # Remove any existing model prefix
+        if persona_name and content.startswith(f"[{persona_name}]"):
+            raw_content = content[len(f"[{persona_name}]"):].strip()
+        else:
+            raw_content = content.strip()
+            
+        # Format the content with persona prefix
+        if persona_name:
+            formatted_content = f"[{persona_name}] {raw_content}"
+        else:
+            formatted_content = raw_content
+            
+        return formatted_content, raw_content
 
     async def add_message_to_context(self, message_id, channel_id, guild_id, user_id, content, is_assistant, persona_name=None, emotion=None):
         try:
             if not content or content.isspace():
                 return
 
-            # Extract persona prefix and raw content
-            prefix, raw_content = self._extract_persona_prefix(content)
-            if prefix:
-                persona_name = prefix
-
             if is_assistant:
+                # Format content with persona prefix
+                formatted_content, raw_content = self._format_assistant_content(content, persona_name)
+
                 if channel_id not in self.current_stream:
                     self.current_stream[channel_id] = {
-                        'content': content,
+                        'content': formatted_content,
                         'raw_content': raw_content,
                         'message_id': message_id,
-                        'full_content': content,
+                        'full_content': formatted_content,
                         'full_raw_content': raw_content
                     }
                 else:
                     if message_id != self.current_stream[channel_id]['message_id']:
-                        # Store the previous complete message before starting a new one
-                        if self.current_stream[channel_id]['full_content']:
-                            await self._store_message(
-                                self.current_stream[channel_id]['message_id'],
-                                channel_id,
-                                guild_id,
-                                user_id,
-                                self.current_stream[channel_id]['full_content'],
-                                self.current_stream[channel_id]['full_raw_content'],
-                                is_assistant,
-                                persona_name,
-                                emotion
-                            )
                         # Start a new message stream
                         self.current_stream[channel_id] = {
-                            'content': content,
+                            'content': formatted_content,
                             'raw_content': raw_content,
                             'message_id': message_id,
-                            'full_content': content,
+                            'full_content': formatted_content,
                             'full_raw_content': raw_content
                         }
                     else:
-                        # For streaming updates, use the longer content
-                        if len(raw_content) > len(self.current_stream[channel_id]['raw_content']):
-                            self.current_stream[channel_id]['content'] = content
-                            self.current_stream[channel_id]['raw_content'] = raw_content
-                            self.current_stream[channel_id]['full_content'] = content
-                            self.current_stream[channel_id]['full_raw_content'] = raw_content
-                        # For edited messages or final content, use the new content
-                        elif '(edited)' in content:
-                            self.current_stream[channel_id]['content'] = content
-                            self.current_stream[channel_id]['raw_content'] = raw_content
-                            self.current_stream[channel_id]['full_content'] = content
-                            self.current_stream[channel_id]['full_raw_content'] = raw_content
-                        
-                        # Store the message
-                        await self._store_message(
-                            message_id,
-                            channel_id,
-                            guild_id,
-                            user_id,
-                            self.current_stream[channel_id]['full_content'],
-                            self.current_stream[channel_id]['full_raw_content'],
-                            is_assistant,
-                            persona_name,
-                            emotion
-                        )
+                        # Update the full content with the latest chunk
+                        self.current_stream[channel_id]['full_content'] = formatted_content
+                        self.current_stream[channel_id]['full_raw_content'] = raw_content
+
+                # Only store the message when streaming is complete
+                if '(edited)' in content:
+                    await self._store_message(
+                        message_id,
+                        channel_id,
+                        guild_id,
+                        user_id,
+                        self.current_stream[channel_id]['full_content'],
+                        self.current_stream[channel_id]['full_raw_content'],
+                        is_assistant,
+                        persona_name,
+                        emotion
+                    )
+                    # Remove the current stream as it's complete
+                    del self.current_stream[channel_id]
                 return
 
             # For non-assistant messages, store directly but check for edits
             if '(edited)' in content:
-                await self._store_message(message_id, channel_id, guild_id, user_id, content, raw_content, is_assistant, persona_name, emotion)
+                await self._store_message(message_id, channel_id, guild_id, user_id, content, content, is_assistant, persona_name, emotion)
             else:
                 # Only store if it's a new message
                 cursor = self._db.cursor()
                 cursor.execute('SELECT content FROM messages WHERE discord_message_id = ?', (str(message_id),))
                 existing = cursor.fetchone()
                 if not existing:
-                    await self._store_message(message_id, channel_id, guild_id, user_id, content, raw_content, is_assistant, persona_name, emotion)
+                    await self._store_message(message_id, channel_id, guild_id, user_id, content, content, is_assistant, persona_name, emotion)
 
         except Exception as e:
             logging.error(f"Failed to add message to context: {str(e)}")
