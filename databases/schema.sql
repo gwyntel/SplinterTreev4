@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS messages (
     user_id TEXT NOT NULL,
     persona_name TEXT,
     content TEXT NOT NULL,
+    raw_content TEXT NOT NULL,  -- Added to store message content without formatting
     is_assistant BOOLEAN NOT NULL,
     parent_message_id INTEGER,
     emotion TEXT,
@@ -75,6 +76,7 @@ CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp);
 CREATE INDEX IF NOT EXISTS idx_messages_user ON messages(user_id);
 CREATE INDEX IF NOT EXISTS idx_messages_persona ON messages(persona_name);
 CREATE INDEX IF NOT EXISTS idx_messages_discord_id ON messages(discord_message_id);  -- Added index for Discord message ID
+CREATE INDEX IF NOT EXISTS idx_messages_raw_content ON messages(raw_content);  -- Added index for raw_content
 CREATE INDEX IF NOT EXISTS idx_summaries_channel ON chat_summaries(channel_id);
 CREATE INDEX IF NOT EXISTS idx_summaries_timestamp ON chat_summaries(end_timestamp);
 CREATE INDEX IF NOT EXISTS idx_logs_requested_at ON logs(requested_at);
