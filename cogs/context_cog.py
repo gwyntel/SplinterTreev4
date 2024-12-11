@@ -265,37 +265,49 @@ class ContextCog(commands.Cog):
 
             if is_assistant:
                 if channel_id not in self.current_stream:
-                    self.current_stream[channel_id] = {'content': '', 'message_id': message_id}
-                
-                if message_id != self.current_stream[channel_id]['message_id']:
-                    # Store the previous complete message before starting a new one
-                    if self.current_stream[channel_id]['content']:
+                    self.current_stream[channel_id] = {
+                        'content': content,
+                        'message_id': message_id,
+                        'accumulated_content': content  # New field to track full content
+                    }
+                else:
+                    if message_id != self.current_stream[channel_id]['message_id']:
+                        # Store the previous complete message before starting a new one
+                        if self.current_stream[channel_id]['accumulated_content']:
+                            await self._store_message(
+                                self.current_stream[channel_id]['message_id'],
+                                channel_id,
+                                guild_id,
+                                user_id,
+                                self.current_stream[channel_id]['accumulated_content'],
+                                is_assistant,
+                                persona_name,
+                                emotion
+                            )
+                        # Start a new message stream
+                        self.current_stream[channel_id] = {
+                            'content': content,
+                            'message_id': message_id,
+                            'accumulated_content': content
+                        }
+                    else:
+                        # Update current content and accumulated content
+                        self.current_stream[channel_id]['content'] = content
+                        # Only store the longer content to handle both streaming types
+                        if len(content) > len(self.current_stream[channel_id]['accumulated_content']):
+                            self.current_stream[channel_id]['accumulated_content'] = content
+                        
+                        # Store the updated complete message
                         await self._store_message(
-                            self.current_stream[channel_id]['message_id'],
+                            message_id,
                             channel_id,
                             guild_id,
                             user_id,
-                            self.current_stream[channel_id]['content'],
+                            self.current_stream[channel_id]['accumulated_content'],
                             is_assistant,
                             persona_name,
                             emotion
                         )
-                    # Start a new message stream
-                    self.current_stream[channel_id] = {'content': content, 'message_id': message_id}
-                else:
-                    # Append to existing message stream
-                    self.current_stream[channel_id]['content'] = content
-                    # Store the updated complete message
-                    await self._store_message(
-                        message_id,
-                        channel_id,
-                        guild_id,
-                        user_id,
-                        self.current_stream[channel_id]['content'],
-                        is_assistant,
-                        persona_name,
-                        emotion
-                    )
                 return
 
             await self._store_message(message_id, channel_id, guild_id, user_id, content, is_assistant, persona_name, emotion)
