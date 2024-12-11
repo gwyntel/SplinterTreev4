@@ -29,6 +29,7 @@ def context_cog(bot):
         user_id TEXT NOT NULL,
         persona_name TEXT,
         content TEXT NOT NULL,
+        raw_content TEXT NOT NULL,
         is_assistant BOOLEAN NOT NULL,
         parent_message_id INTEGER,
         emotion TEXT,

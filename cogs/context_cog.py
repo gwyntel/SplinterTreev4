@@ -50,6 +50,7 @@ class ContextCog(commands.Cog):
                     user_id TEXT NOT NULL,
                     persona_name TEXT,
                     content TEXT NOT NULL,
+                    raw_content TEXT NOT NULL,
                     is_assistant BOOLEAN NOT NULL,
                     parent_message_id INTEGER,
                     emotion TEXT,
@@ -172,6 +173,7 @@ class ContextCog(commands.Cog):
                 m.discord_message_id,
                 m.user_id,
                 m.content,
+                m.raw_content,
                 m.is_assistant,
                 m.persona_name,
                 m.emotion,
@@ -197,6 +199,7 @@ class ContextCog(commands.Cog):
             
             for row in cursor.fetchall():
                 content = row[2]
+                raw_content = row[3]
                 if not content or content.isspace() or content in seen_contents:
                     continue
                 seen_contents.add(content)
@@ -205,10 +208,11 @@ class ContextCog(commands.Cog):
                     'id': row[0],
                     'user_id': row[1],
                     'content': content,
-                    'is_assistant': bool(row[3]),
-                    'persona_name': row[4],
-                    'emotion': row[5],
-                    'timestamp': row[6]
+                    'raw_content': raw_content,
+                    'is_assistant': bool(row[4]),
+                    'persona_name': row[5],
+                    'emotion': row[6],
+                    'timestamp': row[7]
                 })
             
             messages.reverse()
@@ -247,6 +251,7 @@ class ContextCog(commands.Cog):
                     'id': f"blank_{len(result)}",
                     'user_id': None,
                     'content': "[No response]",  # Placeholder message instead of empty string
+                    'raw_content': "[No response]",
                     'is_assistant': True,
                     'persona_name': None,
                     'emotion': None,
@@ -258,28 +263,44 @@ class ContextCog(commands.Cog):
 
         return result
 
+    def _extract_persona_prefix(self, content: str) -> tuple[str, str]:
+        """Extract persona prefix from content if present."""
+        if ': ' in content:
+            parts = content.split(': ', 1)
+            if len(parts) == 2 and '[' in parts[0] and ']' in parts[0]:
+                return parts[0].strip(), parts[1].strip()
+        return None, content.strip()
+
     async def add_message_to_context(self, message_id, channel_id, guild_id, user_id, content, is_assistant, persona_name=None, emotion=None):
         try:
             if not content or content.isspace():
                 return
 
+            # Extract persona prefix and raw content
+            prefix, raw_content = self._extract_persona_prefix(content)
+            if prefix:
+                persona_name = prefix
+
             if is_assistant:
                 if channel_id not in self.current_stream:
                     self.current_stream[channel_id] = {
                         'content': content,
+                        'raw_content': raw_content,
                         'message_id': message_id,
-                        'accumulated_content': content  # New field to track full content
+                        'full_content': content,
+                        'full_raw_content': raw_content
                     }
                 else:
                     if message_id != self.current_stream[channel_id]['message_id']:
                         # Store the previous complete message before starting a new one
-                        if self.current_stream[channel_id]['accumulated_content']:
+                        if self.current_stream[channel_id]['full_content']:
                             await self._store_message(
                                 self.current_stream[channel_id]['message_id'],
                                 channel_id,
                                 guild_id,
                                 user_id,
-                                self.current_stream[channel_id]['accumulated_content'],
+                                self.current_stream[channel_id]['full_content'],
+                                self.current_stream[channel_id]['full_raw_content'],
                                 is_assistant,
                                 persona_name,
                                 emotion
@@ -287,35 +308,54 @@ class ContextCog(commands.Cog):
                         # Start a new message stream
                         self.current_stream[channel_id] = {
                             'content': content,
+                            'raw_content': raw_content,
                             'message_id': message_id,
-                            'accumulated_content': content
+                            'full_content': content,
+                            'full_raw_content': raw_content
                         }
                     else:
-                        # Update current content and accumulated content
-                        self.current_stream[channel_id]['content'] = content
-                        # Only store the longer content to handle both streaming types
-                        if len(content) > len(self.current_stream[channel_id]['accumulated_content']):
-                            self.current_stream[channel_id]['accumulated_content'] = content
+                        # For streaming updates, use the longer content
+                        if len(raw_content) > len(self.current_stream[channel_id]['raw_content']):
+                            self.current_stream[channel_id]['content'] = content
+                            self.current_stream[channel_id]['raw_content'] = raw_content
+                            self.current_stream[channel_id]['full_content'] = content
+                            self.current_stream[channel_id]['full_raw_content'] = raw_content
+                        # For edited messages or final content, use the new content
+                        elif '(edited)' in content:
+                            self.current_stream[channel_id]['content'] = content
+                            self.current_stream[channel_id]['raw_content'] = raw_content
+                            self.current_stream[channel_id]['full_content'] = content
+                            self.current_stream[channel_id]['full_raw_content'] = raw_content
                         
-                        # Store the updated complete message
+                        # Store the message
                         await self._store_message(
                             message_id,
                             channel_id,
                             guild_id,
                             user_id,
-                            self.current_stream[channel_id]['accumulated_content'],
+                            self.current_stream[channel_id]['full_content'],
+                            self.current_stream[channel_id]['full_raw_content'],
                             is_assistant,
                             persona_name,
                             emotion
                         )
                 return
 
-            await self._store_message(message_id, channel_id, guild_id, user_id, content, is_assistant, persona_name, emotion)
+            # For non-assistant messages, store directly but check for edits
+            if '(edited)' in content:
+                await self._store_message(message_id, channel_id, guild_id, user_id, content, raw_content, is_assistant, persona_name, emotion)
+            else:
+                # Only store if it's a new message
+                cursor = self._db.cursor()
+                cursor.execute('SELECT content FROM messages WHERE discord_message_id = ?', (str(message_id),))
+                existing = cursor.fetchone()
+                if not existing:
+                    await self._store_message(message_id, channel_id, guild_id, user_id, content, raw_content, is_assistant, persona_name, emotion)
 
         except Exception as e:
             logging.error(f"Failed to add message to context: {str(e)}")
 
-    async def _store_message(self, message_id, channel_id, guild_id, user_id, content, is_assistant, persona_name=None, emotion=None):
+    async def _store_message(self, message_id, channel_id, guild_id, user_id, content, raw_content, is_assistant, persona_name=None, emotion=None):
         try:
             if not is_assistant:
                 last_msg = self.last_messages.get(channel_id, {}).get('user')
@@ -328,7 +368,7 @@ class ContextCog(commands.Cog):
                 try:
                     user = await self.bot.fetch_user(int(user_id))
                     username = user.display_name
-                    prefixed_content = f"{username}: {content}"
+                    prefixed_content = f"{username}: {raw_content}"
                 except:
                     prefixed_content = content
 
@@ -337,14 +377,15 @@ class ContextCog(commands.Cog):
                 
                 cursor.execute('''
                 INSERT OR REPLACE INTO messages 
-                (discord_message_id, channel_id, guild_id, user_id, content, is_assistant, persona_name, emotion, timestamp)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (discord_message_id, channel_id, guild_id, user_id, content, raw_content, is_assistant, persona_name, emotion, timestamp)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     str(message_id), 
                     str(channel_id), 
                     str(guild_id) if guild_id else None, 
                     str(user_id), 
                     prefixed_content,
+                    raw_content,
                     is_assistant, 
                     persona_name, 
                     emotion, 
