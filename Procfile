@@ -1,3 +1,2 @@
-web: python web.py
+web: gunicorn web:app
 worker: python bot.py
-combined: python run_combined.py
