@@ -293,297 +293,302 @@ class API:
         
         return 'application/octet-stream'
 
-async def _stream_response(self, response_stream, requested_at: int, payload: Dict, provider: str, user_id: str, guild_id: str, prompt_file: str, model_cog: str) -> AsyncGenerator[str, None]:
-    """Handle streaming response with improved chunk handling"""
-    full_response = ""
-    citations = None  # Will be populated from the root response object
-    try:
-        # Get citations from the root response object if available
-        if hasattr(response_stream, 'citations'):
-            citations = response_stream.citations
-
-        # Validate response_stream type
-        if not hasattr(response_stream, '__aiter__') and not hasattr(response_stream, '__iter__'):
-            error_msg = f"Invalid response_stream type: {type(response_stream)}. Expected async generator or iterable."
-            logger.error(f"[API] {error_msg}")
-            raise TypeError(error_msg)
-
-        # Convert response_stream to async generator if it's not already
-        if hasattr(response_stream, '__aiter__'):
-            async for chunk in response_stream:
-                if not chunk or not chunk.choices:
-                    continue
-
-                delta = chunk.choices[0].delta
-                if hasattr(delta, 'content') and delta.content:
-                    full_response += delta.content
-                    # Only yield the chunk, don't notify context_cog yet
-                    yield delta.content
-                elif hasattr(delta, 'tool_calls') and delta.tool_calls:
-                    tool_call = delta.tool_calls[0]
-                    if hasattr(tool_call, 'function'):
-                        tool_data = {
-                            'name': tool_call.function.name if hasattr(tool_call.function, 'name') else None,
-                            'arguments': tool_call.function.arguments if hasattr(tool_call.function, 'arguments') else None
-                        }
-                        yield json.dumps(tool_data)
-                        full_response += json.dumps(tool_data)
-
-            # After streaming content, append citations if present
-            if citations:
-                citation_text = "\n\n**Sources:**"
-                for i, citation in enumerate(citations, 1):
-                    citation_text += f"\n[{i}] {citation}"
-                yield citation_text
-                full_response += citation_text
-
-        else:
-            # Handle non-async stream
-            for chunk in response_stream:
-                if not chunk or not chunk.choices:
-                    continue
-
-                delta = chunk.choices[0].delta
-                if hasattr(delta, 'content') and delta.content:
-                    full_response += delta.content
-                    # Only yield the chunk, don't notify context_cog yet
-                    yield delta.content
-                elif hasattr(delta, 'tool_calls') and delta.tool_calls:
-                    tool_call = delta.tool_calls[0]
-                    if hasattr(tool_call, 'function'):
-                        tool_data = {
-                            'name': tool_call.function.name if hasattr(tool_call.function, 'name') else None,
-                            'arguments': tool_call.function.arguments if hasattr(tool_call.function, 'arguments') else None
-                        }
-                        yield json.dumps(tool_data)
-                        full_response += json.dumps(tool_data)
-
-            # After streaming content, append citations if present
-            if citations:
-                citation_text = "\n\n**Sources:**"
-                for i, citation in enumerate(citations, 1):
-                    citation_text += f"\n[{i}] {citation}"
-                yield citation_text
-                full_response += citation_text
-
-        # Log completion with full accumulated response
-        received_at = int(time.time() * 1000)
+    async def _stream_response(self, response_stream, requested_at: int, payload: Dict, provider: str, user_id: str, guild_id: str, prompt_file: str, model_cog: str) -> AsyncGenerator[str, None]:
+        """Handle streaming response with improved chunk handling"""
+        full_response = ""
+        citations = None  # Will be populated from the root response object
         try:
-            await self.report(
-                requested_at=requested_at,
-                received_at=received_at,
-                req_payload=payload,
-                resp_payload={"choices": [{"message": {"content": full_response}}], "citations": citations},
-                status_code=200,
-                tags={
-                    "source": provider if provider else "",
-                    "user_id": str(user_id) if user_id else "",
-                    "guild_id": str(guild_id) if guild_id else "",
-                    "prompt_file": str(prompt_file) if prompt_file else "",
-                    "model_cog": str(model_cog) if model_cog else "",
-                    "streaming": "true"
-                },
-                user_id=user_id,
-                guild_id=guild_id
-            )
-            
-            # Now that streaming is complete, notify context_cog with the full response
-            if hasattr(self.bot, 'get_cog'):
-                context_cog = self.bot.get_cog('ContextCog')
-                if context_cog:
-                    await context_cog.add_message_to_context(
-                        message_id=None,  # You'll need to pass the correct message ID
-                        channel_id=None,  # You'll need to pass the correct channel ID
-                        guild_id=guild_id,
-                        user_id=user_id,
-                        content=full_response,
-                        is_assistant=True
-                    )
-        except Exception as e:
-            logger.error(f"[API] Failed to report streaming interaction: {str(e)}")
+            # Get citations from the root response object if available
+            if hasattr(response_stream, 'citations'):
+                citations = response_stream.citations
 
-    except Exception as e:
-        logger.error(f"[API] Error in stream response: {str(e)}")
-        error_msg = f"Error: {str(e)}"
-        yield error_msg
-        full_response += error_msg
-        
-async def call_openpipe(self, messages: List[Dict[str, Union[str, List[Dict[str, Any]]]]], model: str, temperature: float = None, stream: bool = False, max_tokens: int = None, provider: str = None, user_id: str = None, guild_id: str = None, prompt_file: str = None, model_cog: str = None, tools: List[Dict] = None, tool_choice: Union[str, Dict] = None) -> Union[Dict, AsyncGenerator[str, None]]:
-    """Call OpenPipe API with fallback support"""
-    if self.session is None:
-        await self.setup()
+            # Validate response_stream type
+            if not hasattr(response_stream, '__aiter__') and not hasattr(response_stream, '__iter__'):
+                error_msg = f"Invalid response_stream type: {type(response_stream)}. Expected async generator or iterable."
+                logger.error(f"[API] {error_msg}")
+                raise TypeError(error_msg)
 
-    try:
-        await self._enforce_rate_limit()
-        
-        logger.debug(f"[API] Making OpenPipe request to model: {model}")
-        logger.debug(f"[API] Stream mode: {stream}")
-        
-        validated_messages = await self._validate_message_roles(messages)
-        
-        # Prepare request payload
-        payload = {
-            "model": model,
-            "messages": validated_messages,
-            "temperature": temperature if temperature is not None else 0.7,
-            "max_tokens": max_tokens if max_tokens is not None else 1000,
-            "stream": stream
-        }
+            # Convert response_stream to async generator if it's not already
+            if hasattr(response_stream, '__aiter__'):
+                async for chunk in response_stream:
+                    if not chunk or not chunk.choices:
+                        continue
 
-        # Add tools if provided
-        if tools:
-            payload["tools"] = tools
-        if tool_choice:
-            payload["tool_choice"] = tool_choice
-
-        # Add metadata for OpenPipe logging
-        metadata = {}
-        if user_id:
-            metadata["user_id"] = str(user_id)
-        if guild_id:
-            metadata["guild_id"] = str(guild_id)
-        if prompt_file:
-            metadata["prompt_file"] = str(prompt_file)
-        if model_cog:
-            metadata["model_cog"] = str(model_cog)
-
-        if metadata:
-            payload["metadata"] = metadata
-
-        requested_at = int(time.time() * 1000)
-
-        try:
-            # Use OpenPipe client with fallback support
-            response = await self.openpipe_client.chat.completions.create(**payload)
-            
-            if stream:
-                return self._stream_response(response, requested_at, payload, provider, user_id, guild_id, prompt_file, model_cog)
-            else:
-                received_at = int(time.time() * 1000)
-                
-                if not hasattr(response, 'choices') or not response.choices:
-                    error_msg = f"Invalid response structure from OpenPipe API: {response}"
-                    logger.error(f"[API] {error_msg}")
-                    raise ValueError(error_msg)
-                
-                content = response.choices[0].message.content
-                citations = getattr(response, 'citations', None)
-                
-                # Add citations to content if present
-                if citations:
-                    content += "\n\n**Sources:**"
-                    for i, citation in enumerate(citations, 1):
-                        content += f"\n[{i}] {citation}"
-                
-                result = {
-                    'choices': [{
-                        'message': {
-                            'content': content,
-                            'role': 'assistant'
-                        }
-                    }],
-                    'citations': citations
-                }
-
-                # Add tool calls if present
-                if hasattr(response.choices[0].message, 'tool_calls') and response.choices[0].message.tool_calls:
-                    result['choices'][0]['message']['tool_calls'] = [
-                        {
-                            'id': tool_call.id,
-                            'type': tool_call.type,
-                            'function': {
-                                'name': tool_call.function.name,
-                                'arguments': tool_call.function.arguments
+                    delta = chunk.choices[0].delta
+                    if hasattr(delta, 'content') and delta.content:
+                        full_response += delta.content
+                        # Only yield the chunk, don't notify context_cog yet
+                        yield delta.content
+                    elif hasattr(delta, 'tool_calls') and delta.tool_calls:
+                        tool_call = delta.tool_calls[0]
+                        if hasattr(tool_call, 'function'):
+                            tool_data = {
+                                'name': tool_call.function.name if hasattr(tool_call.function, 'name') else None,
+                                'arguments': tool_call.function.arguments if hasattr(tool_call.function, 'arguments') else None
                             }
-                        }
-                        for tool_call in response.choices[0].message.tool_calls
-                    ]
+                            yield json.dumps(tool_data)
+                            full_response += json.dumps(tool_data)
+
+                # After streaming content, append citations if present
+                if citations:
+                    citation_text = "\n\n**Sources:**"
+                    for i, citation in enumerate(citations, 1):
+                        citation_text += f"\n[{i}] {citation}"
+                    yield citation_text
+                    full_response += citation_text
+
+            else:
+                # Handle non-async stream
+                for chunk in response_stream:
+                    if not chunk or not chunk.choices:
+                        continue
+
+                    delta = chunk.choices[0].delta
+                    if hasattr(delta, 'content') and delta.content:
+                        full_response += delta.content
+                        # Only yield the chunk, don't notify context_cog yet
+                        yield delta.content
+                    elif hasattr(delta, 'tool_calls') and delta.tool_calls:
+                        tool_call = delta.tool_calls[0]
+                        if hasattr(tool_call, 'function'):
+                            tool_data = {
+                                'name': tool_call.function.name if hasattr(tool_call.function, 'name') else None,
+                                'arguments': tool_call.function.arguments if hasattr(tool_call.function, 'arguments') else None
+                            }
+                            yield json.dumps(tool_data)
+                            full_response += json.dumps(tool_data)
+
+                # After streaming content, append citations if present
+                if citations:
+                    citation_text = "\n\n**Sources:**"
+                    for i, citation in enumerate(citations, 1):
+                        citation_text += f"\n[{i}] {citation}"
+                    yield citation_text
+                    full_response += citation_text
+
+            # Log completion with full accumulated response
+            received_at = int(time.time() * 1000)
+            try:
+                await self.report(
+                    requested_at=requested_at,
+                    received_at=received_at,
+                    req_payload=payload,
+                    resp_payload={"choices": [{"message": {"content": full_response}}], "citations": citations},
+                    status_code=200,
+                    tags={
+                        "source": provider if provider else "",
+                        "user_id": str(user_id) if user_id else "",
+                        "guild_id": str(guild_id) if guild_id else "",
+                        "prompt_file": str(prompt_file) if prompt_file else "",
+                        "model_cog": str(model_cog) if model_cog else "",
+                        "streaming": "true"
+                    },
+                    user_id=user_id,
+                    guild_id=guild_id
+                )
                 
-                # Log completion
-                try:
-                    await self.report(
-                        requested_at=requested_at,
-                        received_at=received_at,
-                        req_payload=payload,
-                        resp_payload=result,
-                        status_code=200,
-                        tags={
-                            "source": provider if provider else "",
-                            "user_id": str(user_id) if user_id else "",
-                            "guild_id": str(guild_id) if guild_id else "",
-                            "prompt_file": str(prompt_file) if prompt_file else "",
-                            "model_cog": str(model_cog) if model_cog else "",
-                            "streaming": "false"
-                        },
-                        user_id=user_id,
-                        guild_id=guild_id
-                    )
-                except Exception as e:
-                    logger.error(f"[API] Failed to report completion: {str(e)}")
-                
-                return result
+                # Now that streaming is complete, notify context_cog with the full response
+                if hasattr(self.bot, 'get_cog'):
+                    context_cog = self.bot.get_cog('ContextCog')
+                    if context_cog:
+                        await context_cog.add_message_to_context(
+                            message_id=None,  # You'll need to pass the correct message ID
+                            channel_id=None,  # You'll need to pass the correct channel ID
+                            guild_id=guild_id,
+                            user_id=user_id,
+                            content=full_response,
+                            is_assistant=True
+                        )
+            except Exception as e:
+                logger.error(f"[API] Failed to report streaming interaction: {str(e)}")
 
         except Exception as e:
-            error_msg = f"OpenPipe API error: {str(e)}"
-            logger.error(f"[API] {error_msg}")
-            raise ValueError(error_msg)
-        
-    except Exception as e:
-        error_message = str(e)
-        logger.error(f"[API] OpenPipe error: {error_message}")
-        raise Exception(f"OpenPipe API error: {error_message}")
+            logger.error(f"[API] Error in stream response: {str(e)}")
+            error_msg = f"Error: {str(e)}"
+            yield error_msg
+            full_response += error_msg
 
-async def report(self, requested_at: int, received_at: int, req_payload: Dict, resp_payload: Dict, status_code: int, tags: Dict = None, user_id: str = None, guild_id: str = None):
-    """Report interaction metrics with improved error handling"""
-    try:
-        if tags is None:
-            tags = {}
+    async def call_openpipe(self, messages: List[Dict[str, Union[str, List[Dict[str, Any]]]]], model: str, temperature: float = None, stream: bool = False, max_tokens: int = None, provider: str = None, user_id: str = None, guild_id: str = None, prompt_file: str = None, model_cog: str = None, tools: List[Dict] = None, tool_choice: Union[str, Dict] = None) -> Union[Dict, AsyncGenerator[str, None]]:
+        """Call OpenPipe API with fallback support"""
+        if self.session is None:
+            await self.setup()
 
-        # Convert MagicMock objects to strings for JSON serialization
-        def serialize_mock(obj):
-            if hasattr(obj, '_mock_return_value'):
-                return str(obj._mock_return_value)
-            elif isinstance(obj, dict):
-                return {k: serialize_mock(v) for k, v in obj.items()}
-            elif isinstance(obj, list):
-                return [serialize_mock(item) for item in obj]
-            return obj
+        try:
+            await self._enforce_rate_limit()
+            
+            logger.debug(f"[API] Making OpenPipe request to model: {model}")
+            logger.debug(f"[API] Stream mode: {stream}")
+            
+            validated_messages = await self._validate_message_roles(messages)
+            
+            # Prepare request payload
+            payload = {
+                "model": model,
+                "messages": validated_messages,
+                "temperature": temperature if temperature is not None else 0.7,
+                "max_tokens": max_tokens if max_tokens is not None else 1000,
+                "stream": stream
+            }
 
-        # Serialize payloads and tags
-        req_payload = serialize_mock(req_payload)
-        resp_payload = serialize_mock(resp_payload)
-        tags = serialize_mock(tags)
+            # Add tools if provided
+            if tools:
+                payload["tools"] = tools
+            if tool_choice:
+                payload["tool_choice"] = tool_choice
 
-        tags_str = json.dumps(tags)
-        req_str = json.dumps(req_payload)
-        resp_str = json.dumps(resp_payload)
+            # Add metadata for OpenPipe logging
+            metadata = {}
+            if user_id:
+                metadata["user_id"] = str(user_id)
+            if guild_id:
+                metadata["guild_id"] = str(guild_id)
+            if prompt_file:
+                metadata["prompt_file"] = str(prompt_file)
+            if model_cog:
+                metadata["model_cog"] = str(model_cog)
 
-        async with self.db_pool.acquire() as conn:
-            cursor = conn.cursor()
-            sql = """
-                INSERT INTO logs (
-                    requested_at, received_at, request, response, 
-                    status_code, tags, user_id, guild_id
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """
-            values = (
-                requested_at, received_at, req_str,
-                resp_str, status_code, tags_str,
-                user_id, guild_id
-            )
+            if metadata:
+                payload["metadata"] = metadata
 
-            cursor.execute(sql, values)
-            conn.commit()
-            logger.debug(f"[API] Logged interaction with status code {status_code}")
+            requested_at = int(time.time() * 1000)
 
-    except Exception as e:
-        logger.error(f"[API] Failed to report interaction: {str(e)}")
+            try:
+                # Use OpenPipe client with fallback support
+                response = await self.openpipe_client.chat.completions.create(**payload)
+                
+                if stream:
+                    # Ensure response is an async generator
+                    if not hasattr(response, '__aiter__'):
+                        async def response_generator():
+                            yield json.dumps(response)
+                        response = response_generator()
+                    return self._stream_response(response, requested_at, payload, provider, user_id, guild_id, prompt_file, model_cog)
+                else:
+                    received_at = int(time.time() * 1000)
+                    
+                    if not hasattr(response, 'choices') or not response.choices:
+                        error_msg = f"Invalid response structure from OpenPipe API: {response}"
+                        logger.error(f"[API] {error_msg}")
+                        raise ValueError(error_msg)
+                    
+                    content = response.choices[0].message.content
+                    citations = getattr(response, 'citations', None)
+                    
+                    # Add citations to content if present
+                    if citations:
+                        content += "\n\n**Sources:**"
+                        for i, citation in enumerate(citations, 1):
+                            content += f"\n[{i}] {citation}"
+                    
+                    result = {
+                        'choices': [{
+                            'message': {
+                                'content': content,
+                                'role': 'assistant'
+                            }
+                        }],
+                        'citations': citations
+                    }
 
-async def close(self):
-    """Cleanup resources"""
-    if self.session:
-        await self.session.close()
-    await self.db_pool.close()
+                    # Add tool calls if present
+                    if hasattr(response.choices[0].message, 'tool_calls') and response.choices[0].message.tool_calls:
+                        result['choices'][0]['message']['tool_calls'] = [
+                            {
+                                'id': tool_call.id,
+                                'type': tool_call.type,
+                                'function': {
+                                    'name': tool_call.function.name,
+                                    'arguments': tool_call.function.arguments
+                                }
+                            }
+                            for tool_call in response.choices[0].message.tool_calls
+                        ]
+                    
+                    # Log completion
+                    try:
+                        await self.report(
+                            requested_at=requested_at,
+                            received_at=received_at,
+                            req_payload=payload,
+                            resp_payload=result,
+                            status_code=200,
+                            tags={
+                                "source": provider if provider else "",
+                                "user_id": str(user_id) if user_id else "",
+                                "guild_id": str(guild_id) if guild_id else "",
+                                "prompt_file": str(prompt_file) if prompt_file else "",
+                                "model_cog": str(model_cog) if model_cog else "",
+                                "streaming": "false"
+                            },
+                            user_id=user_id,
+                            guild_id=guild_id
+                        )
+                    except Exception as e:
+                        logger.error(f"[API] Failed to report completion: {str(e)}")
+                    
+                    return result
+
+            except Exception as e:
+                error_msg = f"OpenPipe API error: {str(e)}"
+                logger.error(f"[API] {error_msg}")
+                raise ValueError(error_msg)
+            
+        except Exception as e:
+            error_message = str(e)
+            logger.error(f"[API] OpenPipe error: {error_message}")
+            raise Exception(f"OpenPipe API error: {error_message}")
+
+    async def report(self, requested_at: int, received_at: int, req_payload: Dict, resp_payload: Dict, status_code: int, tags: Dict = None, user_id: str = None, guild_id: str = None):
+        """Report interaction metrics with improved error handling"""
+        try:
+            if tags is None:
+                tags = {}
+
+            # Convert MagicMock objects to strings for JSON serialization
+            def serialize_mock(obj):
+                if hasattr(obj, '_mock_return_value'):
+                    return str(obj._mock_return_value)
+                elif isinstance(obj, dict):
+                    return {k: serialize_mock(v) for k, v in obj.items()}
+                elif isinstance(obj, list):
+                    return [serialize_mock(item) for item in obj]
+                return obj
+
+            # Serialize payloads and tags
+            req_payload = serialize_mock(req_payload)
+            resp_payload = serialize_mock(resp_payload)
+            tags = serialize_mock(tags)
+
+            tags_str = json.dumps(tags)
+            req_str = json.dumps(req_payload)
+            resp_str = json.dumps(resp_payload)
+
+            async with self.db_pool.acquire() as conn:
+                cursor = conn.cursor()
+                sql = """
+                    INSERT INTO logs (
+                        requested_at, received_at, request, response, 
+                        status_code, tags, user_id, guild_id
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """
+                values = (
+                    requested_at, received_at, req_str,
+                    resp_str, status_code, tags_str,
+                    user_id, guild_id
+                )
+
+                cursor.execute(sql, values)
+                conn.commit()
+                logger.debug(f"[API] Logged interaction with status code {status_code}")
+
+        except Exception as e:
+            logger.error(f"[API] Failed to report interaction: {str(e)}")
+
+    async def close(self):
+        """Cleanup resources"""
+        if self.session:
+            await self.session.close()
+        await self.db_pool.close()
 
 # Global API instance
 api = API()
