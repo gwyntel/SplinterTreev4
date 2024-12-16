@@ -311,6 +311,7 @@ class API:
                     delta = chunk.choices[0].delta
                     if hasattr(delta, 'content') and delta.content:
                         full_response += delta.content
+                        # Only yield the chunk, don't notify context_cog yet
                         yield delta.content
                     elif hasattr(delta, 'tool_calls') and delta.tool_calls:
                         tool_call = delta.tool_calls[0]
@@ -339,6 +340,7 @@ class API:
                     delta = chunk.choices[0].delta
                     if hasattr(delta, 'content') and delta.content:
                         full_response += delta.content
+                        # Only yield the chunk, don't notify context_cog yet
                         yield delta.content
                     elif hasattr(delta, 'tool_calls') and delta.tool_calls:
                         tool_call = delta.tool_calls[0]
@@ -378,6 +380,19 @@ class API:
                     user_id=user_id,
                     guild_id=guild_id
                 )
+                
+                # Now that streaming is complete, notify context_cog with the full response
+                if hasattr(self.bot, 'get_cog'):
+                    context_cog = self.bot.get_cog('ContextCog')
+                    if context_cog:
+                        await context_cog.add_message_to_context(
+                            message_id=None,  # You'll need to pass the correct message ID
+                            channel_id=None,  # You'll need to pass the correct channel ID
+                            guild_id=guild_id,
+                            user_id=user_id,
+                            content=full_response,
+                            is_assistant=True
+                        )
             except Exception as e:
                 logger.error(f"[API] Failed to report streaming interaction: {str(e)}")
 
