@@ -11,7 +11,7 @@ class GrokCog(BaseCog):
             name="Grok",
             nickname="Grok",
             trigger_words=['grok', 'xAI'],
-            model="openpipe:xai/grok-beta",
+            model="openpipe:openrouter/x-ai/grok-beta",
             provider="openpipe",
             prompt_file="grok_prompts",
             supports_vision=False
@@ -88,7 +88,7 @@ class GrokCog(BaseCog):
                 messages=messages,
                 model=self.model,
                 temperature=temperature,
-                stream=True,
+                stream=False, # Changed to False to disable streaming
                 provider="openpipe",
                 user_id=user_id,
                 guild_id=guild_id,
