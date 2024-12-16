@@ -289,15 +289,15 @@ class ContextCog(commands.Cog):
                 if last_msg and last_msg['content'] == content:
                     return
 
-            if is_assistant:
-                prefixed_content = content
-            else:
-                try:
+            try:
+                if is_assistant:
+                    prefixed_content = f"Assistant: {content}"
+                else:
                     user = await self.bot.fetch_user(int(user_id))
                     username = user.display_name
                     prefixed_content = f"{username}: {content}"
-                except:
-                    prefixed_content = content
+            except:
+                prefixed_content = content
 
             async with asyncio.Lock():
                 with sqlite3.connect(self.db_path) as conn:
