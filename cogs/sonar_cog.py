@@ -36,6 +36,7 @@ class SonarCog(BaseCog):
     def get_temperature(self):
         """Get temperature setting for this agent"""
         return self.temperatures.get(self.name.lower(), 0.7)
+
     async def generate_response(self, message):
         """Generate a response using openrouter"""
         try:
@@ -83,23 +84,40 @@ class SonarCog(BaseCog):
             user_id = str(message.author.id)
             guild_id = str(message.guild.id) if message.guild else None
 
-            # Call API and return the stream directly
-            response_stream = await self.api_client.call_openpipe(
+            # Call API with stream=False to get citations
+            response = await self.api_client.call_openpipe(
                 messages=messages,
                 model=self.model,
                 temperature=temperature,
-                stream=False, # Changed to False to disable streaming
+                stream=False,
                 provider="openpipe",
                 user_id=user_id,
                 guild_id=guild_id,
                 prompt_file="sonar_prompts"
             )
 
-            return response_stream
+            if response and 'choices' in response:
+                content = response['choices'][0]['message']['content']
+                citations = response.get('citations', [])
+
+                # Add citations if present
+                if citations:
+                    content += "\n\n**Sources:**"
+                    for i, citation in enumerate(citations, 1):
+                        content += f"\n[{i}] {citation}"
+
+                # Create async generator to yield content
+                async def response_generator():
+                    yield content
+
+                return response_generator()
+
+            return None
 
         except Exception as e:
             logging.error(f"Error processing message for Sonar: {e}")
             return None
+
 async def setup(bot):
     try:
         cog = SonarCog(bot)

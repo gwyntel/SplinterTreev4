@@ -88,7 +88,7 @@ class HermesCog(BaseCog):
                 messages=messages,
                 model=self.model,
                 temperature=temperature,
-                stream=False, # Changed to False to disable streaming
+                stream=True,
                 provider="openpipe",
                 user_id=user_id,
                 guild_id=guild_id,
