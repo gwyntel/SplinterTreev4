@@ -36,7 +36,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-class DatabasePool:
+lass DatabasePool:
     def __init__(self, database_path: str, max_connections: int = 10):
         self.database_path = database_path
         self.pool = asyncio.Queue(maxsize=max_connections)
@@ -293,115 +293,121 @@ class API:
         
         return 'application/octet-stream'
 
-    async def _stream_response(self, response_stream, requested_at: int, payload: Dict, provider: str, user_id: str, guild_id: str, prompt_file: str, model_cog: str) -> AsyncGenerator[str, None]:
-        """Handle streaming response with improved chunk handling"""
-        full_response = ""
-        citations = None  # Will be populated from the root response object
+async def _stream_response(self, response_stream, requested_at: int, payload: Dict, provider: str, user_id: str, guild_id: str, prompt_file: str, model_cog: str) -> AsyncGenerator[str, None]:
+    """Handle streaming response with improved chunk handling"""
+    full_response = ""
+    citations = None  # Will be populated from the root response object
+    try:
+        # Get citations from the root response object if available
+        if hasattr(response_stream, 'citations'):
+            citations = response_stream.citations
+
+        # Validate response_stream type
+        if not hasattr(response_stream, '__aiter__') and not hasattr(response_stream, '__iter__'):
+            error_msg = f"Invalid response_stream type: {type(response_stream)}. Expected async generator or iterable."
+            logger.error(f"[API] {error_msg}")
+            raise TypeError(error_msg)
+
+        # Convert response_stream to async generator if it's not already
+        if hasattr(response_stream, '__aiter__'):
+            async for chunk in response_stream:
+                if not chunk or not chunk.choices:
+                    continue
+
+                delta = chunk.choices[0].delta
+                if hasattr(delta, 'content') and delta.content:
+                    full_response += delta.content
+                    # Only yield the chunk, don't notify context_cog yet
+                    yield delta.content
+                elif hasattr(delta, 'tool_calls') and delta.tool_calls:
+                    tool_call = delta.tool_calls[0]
+                    if hasattr(tool_call, 'function'):
+                        tool_data = {
+                            'name': tool_call.function.name if hasattr(tool_call.function, 'name') else None,
+                            'arguments': tool_call.function.arguments if hasattr(tool_call.function, 'arguments') else None
+                        }
+                        yield json.dumps(tool_data)
+                        full_response += json.dumps(tool_data)
+
+            # After streaming content, append citations if present
+            if citations:
+                citation_text = "\n\n**Sources:**"
+                for i, citation in enumerate(citations, 1):
+                    citation_text += f"\n[{i}] {citation}"
+                yield citation_text
+                full_response += citation_text
+
+        else:
+            # Handle non-async stream
+            for chunk in response_stream:
+                if not chunk or not chunk.choices:
+                    continue
+
+                delta = chunk.choices[0].delta
+                if hasattr(delta, 'content') and delta.content:
+                    full_response += delta.content
+                    # Only yield the chunk, don't notify context_cog yet
+                    yield delta.content
+                elif hasattr(delta, 'tool_calls') and delta.tool_calls:
+                    tool_call = delta.tool_calls[0]
+                    if hasattr(tool_call, 'function'):
+                        tool_data = {
+                            'name': tool_call.function.name if hasattr(tool_call.function, 'name') else None,
+                            'arguments': tool_call.function.arguments if hasattr(tool_call.function, 'arguments') else None
+                        }
+                        yield json.dumps(tool_data)
+                        full_response += json.dumps(tool_data)
+
+            # After streaming content, append citations if present
+            if citations:
+                citation_text = "\n\n**Sources:**"
+                for i, citation in enumerate(citations, 1):
+                    citation_text += f"\n[{i}] {citation}"
+                yield citation_text
+                full_response += citation_text
+
+        # Log completion with full accumulated response
+        received_at = int(time.time() * 1000)
         try:
-            # Get citations from the root response object if available
-            if hasattr(response_stream, 'citations'):
-                citations = response_stream.citations
-
-            # Convert response_stream to async generator if it's not already
-            if hasattr(response_stream, '__aiter__'):
-                async for chunk in response_stream:
-                    if not chunk or not chunk.choices:
-                        continue
-
-                    delta = chunk.choices[0].delta
-                    if hasattr(delta, 'content') and delta.content:
-                        full_response += delta.content
-                        # Only yield the chunk, don't notify context_cog yet
-                        yield delta.content
-                    elif hasattr(delta, 'tool_calls') and delta.tool_calls:
-                        tool_call = delta.tool_calls[0]
-                        if hasattr(tool_call, 'function'):
-                            tool_data = {
-                                'name': tool_call.function.name if hasattr(tool_call.function, 'name') else None,
-                                'arguments': tool_call.function.arguments if hasattr(tool_call.function, 'arguments') else None
-                            }
-                            yield json.dumps(tool_data)
-                            full_response += json.dumps(tool_data)
-
-                # After streaming content, append citations if present
-                if citations:
-                    citation_text = "\n\n**Sources:**"
-                    for i, citation in enumerate(citations, 1):
-                        citation_text += f"\n[{i}] {citation}"
-                    yield citation_text
-                    full_response += citation_text
-
-            else:
-                # Handle non-async stream
-                for chunk in response_stream:
-                    if not chunk or not chunk.choices:
-                        continue
-
-                    delta = chunk.choices[0].delta
-                    if hasattr(delta, 'content') and delta.content:
-                        full_response += delta.content
-                        # Only yield the chunk, don't notify context_cog yet
-                        yield delta.content
-                    elif hasattr(delta, 'tool_calls') and delta.tool_calls:
-                        tool_call = delta.tool_calls[0]
-                        if hasattr(tool_call, 'function'):
-                            tool_data = {
-                                'name': tool_call.function.name if hasattr(tool_call.function, 'name') else None,
-                                'arguments': tool_call.function.arguments if hasattr(tool_call.function, 'arguments') else None
-                            }
-                            yield json.dumps(tool_data)
-                            full_response += json.dumps(tool_data)
-
-                # After streaming content, append citations if present
-                if citations:
-                    citation_text = "\n\n**Sources:**"
-                    for i, citation in enumerate(citations, 1):
-                        citation_text += f"\n[{i}] {citation}"
-                    yield citation_text
-                    full_response += citation_text
-
-            # Log completion with full accumulated response
-            received_at = int(time.time() * 1000)
-            try:
-                await self.report(
-                    requested_at=requested_at,
-                    received_at=received_at,
-                    req_payload=payload,
-                    resp_payload={"choices": [{"message": {"content": full_response}}], "citations": citations},
-                    status_code=200,
-                    tags={
-                        "source": provider if provider else "",
-                        "user_id": str(user_id) if user_id else "",
-                        "guild_id": str(guild_id) if guild_id else "",
-                        "prompt_file": str(prompt_file) if prompt_file else "",
-                        "model_cog": str(model_cog) if model_cog else "",
-                        "streaming": "true"
-                    },
-                    user_id=user_id,
-                    guild_id=guild_id
-                )
-                
-                # Now that streaming is complete, notify context_cog with the full response
-                if hasattr(self.bot, 'get_cog'):
-                    context_cog = self.bot.get_cog('ContextCog')
-                    if context_cog:
-                        await context_cog.add_message_to_context(
-                            message_id=None,  # You'll need to pass the correct message ID
-                            channel_id=None,  # You'll need to pass the correct channel ID
-                            guild_id=guild_id,
-                            user_id=user_id,
-                            content=full_response,
-                            is_assistant=True
-                        )
-            except Exception as e:
-                logger.error(f"[API] Failed to report streaming interaction: {str(e)}")
-
+            await self.report(
+                requested_at=requested_at,
+                received_at=received_at,
+                req_payload=payload,
+                resp_payload={"choices": [{"message": {"content": full_response}}], "citations": citations},
+                status_code=200,
+                tags={
+                    "source": provider if provider else "",
+                    "user_id": str(user_id) if user_id else "",
+                    "guild_id": str(guild_id) if guild_id else "",
+                    "prompt_file": str(prompt_file) if prompt_file else "",
+                    "model_cog": str(model_cog) if model_cog else "",
+                    "streaming": "true"
+                },
+                user_id=user_id,
+                guild_id=guild_id
+            )
+            
+            # Now that streaming is complete, notify context_cog with the full response
+            if hasattr(self.bot, 'get_cog'):
+                context_cog = self.bot.get_cog('ContextCog')
+                if context_cog:
+                    await context_cog.add_message_to_context(
+                        message_id=None,  # You'll need to pass the correct message ID
+                        channel_id=None,  # You'll need to pass the correct channel ID
+                        guild_id=guild_id,
+                        user_id=user_id,
+                        content=full_response,
+                        is_assistant=True
+                    )
         except Exception as e:
-            logger.error(f"[API] Error in stream response: {str(e)}")
-            error_msg = f"Error: {str(e)}"
-            yield error_msg
-            full_response += error_msg
+            logger.error(f"[API] Failed to report streaming interaction: {str(e)}")
 
+    except Exception as e:
+        logger.error(f"[API] Error in stream response: {str(e)}")
+        error_msg = f"Error: {str(e)}"
+        yield error_msg
+        full_response += error_msg
+        
     async def call_openpipe(self, messages: List[Dict[str, Union[str, List[Dict[str, Any]]]]], model: str, temperature: float = None, stream: bool = False, max_tokens: int = None, provider: str = None, user_id: str = None, guild_id: str = None, prompt_file: str = None, model_cog: str = None, tools: List[Dict] = None, tool_choice: Union[str, Dict] = None) -> Union[Dict, AsyncGenerator[str, None]]:
         """Call OpenPipe API with fallback support"""
         if self.session is None:
