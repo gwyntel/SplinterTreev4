@@ -12,7 +12,6 @@ from contextlib import asynccontextmanager
 from urllib.parse import urlparse, urljoin
 from config import (
     OPENROUTER_API_KEY, 
-    HELICONE_API_KEY,
     OPENPIPE_API_KEY,
     OPENPIPE_API_URL,
     OPENAI_API_KEY
@@ -93,7 +92,6 @@ class API:
             self.session = None
             self.openai_client = None
             self.openpipe_client = None
-            self.infermatic_client = None
 
     async def setup(self):
         """Async initialization"""
@@ -103,23 +101,19 @@ class API:
             self.session = aiohttp.ClientSession(
                 headers={
                     'Authorization': f'Bearer {OPENROUTER_API_KEY}',
-                    'Helicone-Auth': f'Bearer {HELICONE_API_KEY}',
                     'HTTP-Referer': 'https://github.com/gwyntel/SplinterTreev4',
                     'X-Title': 'SplinterTree by GwynTel'
                 },
                 timeout=timeout
             )
             
-            # Initialize OpenAI client with Helicone Gateway URL
+            # Initialize OpenAI client for OpenRouter
             self.openai_client = AsyncOpenAI(
                 api_key=OPENROUTER_API_KEY,
-                base_url="https://gateway.helicone.ai/v1",
+                base_url="https://openrouter.ai/api/v1",
                 default_headers={
-                    'Authorization': f'Bearer {OPENROUTER_API_KEY}',
-                    'Helicone-Auth': f'Bearer {HELICONE_API_KEY}',
-                    'Helicone-Target-Url': "https://openrouter.ai/api",
                     'HTTP-Referer': 'https://github.com/gwyntel/SplinterTreev4',
-                    'X-Title': 'SplinterTree by GwynTel',
+                    'X-Title': 'SplinterTree by GwynTel'
                 },
                 timeout=30.0
             )
@@ -133,20 +127,6 @@ class API:
                         "model": "gpt-4-turbo-preview"  # Fallback to OpenAI if needed
                     }
                 }
-            )
-
-            # Initialize Infermatic client
-            self.infermatic_client = AsyncOpenAI(
-                api_key=HELICONE_API_KEY,
-                base_url="https://gateway.helicone.ai/v1",
-                default_headers={
-                    'Authorization': f'Bearer {HELICONE_API_KEY}',
-                    'Helicone-Auth': f'Bearer {HELICONE_API_KEY}',
-                    'Helicone-Target-Url': "https://api.totalgpt.ai",
-                    'HTTP-Referer': 'https://github.com/gwyntel/SplinterTreev4',
-                    'X-Title': 'SplinterTree by GwynTel',
-                },
-                timeout=30.0
             )
 
     def _init_db(self):
@@ -317,7 +297,6 @@ class API:
                     delta = chunk.choices[0].delta
                     if hasattr(delta, 'content') and delta.content:
                         full_response += delta.content
-                        # Only yield the chunk, don't notify context_cog yet
                         yield delta.content
                     elif hasattr(delta, 'tool_calls') and delta.tool_calls:
                         tool_call = delta.tool_calls[0]
@@ -346,7 +325,6 @@ class API:
                     delta = chunk.choices[0].delta
                     if hasattr(delta, 'content') and delta.content:
                         full_response += delta.content
-                        # Only yield the chunk, don't notify context_cog yet
                         yield delta.content
                     elif hasattr(delta, 'tool_calls') and delta.tool_calls:
                         tool_call = delta.tool_calls[0]
