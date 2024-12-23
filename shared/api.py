@@ -440,12 +440,18 @@ class API:
                 response = await self.openpipe_client.chat.completions.create(**payload)
                 
                 if stream:
-                    # Ensure response is an async generator
-                    if not hasattr(response, '__aiter__'):
+                    # Handle streaming response
+                    if hasattr(response, 'chunks'):
+                        # OpenPipe streaming response
                         async def response_generator():
-                            yield json.dumps(response)
-                        response = response_generator()
-                    return self._stream_response(response, requested_at, payload, provider, user_id, guild_id, prompt_file, model_cog)
+                            async for chunk in response.chunks:
+                                yield chunk
+                        return self._stream_response(response_generator(), requested_at, payload, provider, user_id, guild_id, prompt_file, model_cog)
+                    else:
+                        # Non-streaming fallback
+                        async def response_generator():
+                            yield response
+                        return self._stream_response(response_generator(), requested_at, payload, provider, user_id, guild_id, prompt_file, model_cog)
                 else:
                     received_at = int(time.time() * 1000)
                     
