@@ -92,6 +92,7 @@ class API:
             self.session = None
             self.openai_client = None
             self.openpipe_client = None
+            self.bot = None  # Will be set externally
 
     async def setup(self):
         """Async initialization"""
@@ -365,18 +366,22 @@ class API:
                     guild_id=guild_id
                 )
                 
-                # Now that streaming is complete, notify context_cog with the full response
-                if hasattr(self.bot, 'get_cog'):
-                    context_cog = self.bot.get_cog('ContextCog')
-                    if context_cog:
-                        await context_cog.add_message_to_context(
-                            message_id=None,  # You'll need to pass the correct message ID
-                            channel_id=None,  # You'll need to pass the correct channel ID
-                            guild_id=guild_id,
-                            user_id=user_id,
-                            content=full_response,
-                            is_assistant=True
-                        )
+                # Now that streaming is complete, attempt to notify context_cog with the full response
+                try:
+                    if self.bot and hasattr(self.bot, 'get_cog'):
+                        context_cog = self.bot.get_cog('ContextCog')
+                        if context_cog:
+                            await context_cog.add_message_to_context(
+                                message_id=None,  # You'll need to pass the correct message ID
+                                channel_id=None,  # You'll need to pass the correct channel ID
+                                guild_id=guild_id,
+                                user_id=user_id,
+                                content=full_response,
+                                is_assistant=True
+                            )
+                except Exception as e:
+                    logger.warning(f"[API] Failed to notify context_cog: {str(e)}")
+                    # Continue execution even if context notification fails
             except Exception as e:
                 logger.error(f"[API] Failed to report streaming interaction: {str(e)}")
 

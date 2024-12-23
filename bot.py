@@ -182,6 +182,8 @@ async def setup_cogs(bot: SplinterTreeBot):
     # Initialize API first
     try:
         await bot.api_client.setup()
+        # Set bot reference in API client
+        bot.api_client.bot = bot
         logging.info("API client initialized successfully")
     except Exception as e:
         logging.error(f"Failed to initialize API client: {str(e)}")
