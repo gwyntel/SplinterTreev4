@@ -441,10 +441,16 @@ class API:
                 
                 if stream:
                     # Handle streaming response
-                    if hasattr(response, 'chunks'):
+                    if hasattr(response, 'chunks') and hasattr(response.chunks, '__aiter__'):
                         # OpenPipe streaming response
                         async def response_generator():
                             async for chunk in response.chunks:
+                                yield chunk
+                        return self._stream_response(response_generator(), requested_at, payload, provider, user_id, guild_id, prompt_file, model_cog)
+                    elif hasattr(response, 'chunks') and hasattr(response.chunks, '__iter__'):
+                        # Convert synchronous iterable to async generator
+                        async def response_generator():
+                            for chunk in response.chunks:
                                 yield chunk
                         return self._stream_response(response_generator(), requested_at, payload, provider, user_id, guild_id, prompt_file, model_cog)
                     else:
