@@ -439,6 +439,9 @@ class API:
                 # Use OpenPipe client with fallback support
                 response = await self.openpipe_client.chat.completions.create(**payload)
                 
+                # Debugging: Log the type of response_stream
+                logger.debug(f"[API] Type of response_stream: {type(response)}")
+                
                 if stream:
                     # Handle streaming response
                     if hasattr(response, 'chunks') and hasattr(response.chunks, '__aiter__'):
